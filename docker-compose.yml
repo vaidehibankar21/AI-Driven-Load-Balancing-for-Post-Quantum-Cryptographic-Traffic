@@ -1,0 +1,58 @@
+services:
+  balancer:
+    build:
+      context: .
+      dockerfile: balancer/Dockerfile
+    ports:
+      - "8050:8000"
+    environment:
+      - WORKERS=http://node1:8001,http://node2:8001,http://node3:8001
+    networks:
+      - pqc-net
+
+  node1:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      - NODE_ID=node1
+      - BASE_DELAY_MS=0
+    networks:
+      - pqc-net
+
+  node2:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      - NODE_ID=node2
+      - BASE_DELAY_MS=100
+    networks:
+      - pqc-net
+
+  node3:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      - NODE_ID=node3
+      - BASE_DELAY_MS=200
+    networks:
+      - pqc-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/public:/app/public:ro    # ← Live sync
+    depends_on:
+      - balancer
+    networks:
+      - pqc-net
+
+networks:
+  pqc-net:
+    driver: bridge

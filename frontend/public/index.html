@@ -1,0 +1,1862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚛️</text></svg>" />
+<title>PQC Load Balancer — Adaptive Quantum Routing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+  --bg: #eaf5ff;
+  --bg-2: #dcecff;
+  --surface: #ffffff;
+  --ink: #0a0a0a;
+  --ink-2: #2a2620;
+  --muted: #7a7368;
+  --line: #cfe2f7;
+  --line-2: #b7d0ee;
+
+  --coral: #ff3d81;
+  --coral-soft: #ffe0ee;
+  --teal: #0891b2;
+  --teal-soft: #cdf3fb;
+  --butter: #ffd23f;
+  --butter-soft: #fff2c2;
+  --mint: #10b981;
+  --mint-soft: #d3f5e5;
+  --plum: #7c3aed;
+  --plum-soft: #ece3ff;
+
+  --radius: 22px;
+  --radius-sm: 14px;
+  --shadow: 0 4px 24px rgba(10,10,10,.06);
+  --shadow-lg: 0 24px 60px rgba(10,10,10,.10);
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-serif: 'Instrument Serif', serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══ GRAIN + ORBS ═══ */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1; opacity: .04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.orb { position: fixed; border-radius: 50%; filter: blur(100px); opacity: .35; pointer-events: none; z-index: 0; }
+.orb-1 { width: 480px; height: 480px; background: var(--coral); top: -140px; right: -100px; animation: float 20s ease-in-out infinite; }
+.orb-2 { width: 440px; height: 440px; background: var(--teal); bottom: -140px; left: -120px; animation: float 24s ease-in-out infinite reverse; }
+.orb-3 { width: 340px; height: 340px; background: var(--butter); top: 45%; left: 35%; opacity: .22; animation: float 18s ease-in-out infinite; animation-delay: -8s; }
+@keyframes float {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33% { transform: translate(40px,-30px) scale(1.06); }
+  66% { transform: translate(-30px,20px) scale(.95); }
+}
+
+/* ═══ SCROLL PROGRESS ═══ */
+.scroll-progress {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0;
+  background: linear-gradient(90deg, var(--coral), var(--butter), var(--teal));
+  z-index: 1000; transition: width .1s;
+}
+
+/* ═══ NAV ═══ */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px clamp(20px, 5vw, 60px);
+  background: rgba(246,241,231,.82);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid rgba(227,218,199,.8);
+}
+.logo { font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; letter-spacing: -.02em; display: flex; align-items: center; gap: 8px; }
+.logo-mark {
+  width: 32px; height: 32px; border-radius: 10px; background: var(--ink); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700;
+  font-family: var(--font-mono); transition: transform .4s;
+}
+.logo:hover .logo-mark { transform: rotate(-12deg) scale(1.08); }
+.logo em { font-style: normal; color: var(--coral); }
+.nav-links { display: flex; gap: 26px; align-items: center; }
+.nav-links a { color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 500; transition: color .2s; position: relative; }
+.nav-links a::after { content: ''; position: absolute; left: 0; bottom: -4px; width: 0; height: 2px; background: var(--coral); transition: width .3s; }
+.nav-links a:hover { color: var(--ink); }
+.nav-links a:hover::after { width: 100%; }
+.live-clock { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); padding: 4px 10px; border: 1px solid var(--line); border-radius: 20px; }
+.live-clock .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--mint); margin-right: 6px; animation: pulse 1.6s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,.5); } 50% { opacity: .6; box-shadow: 0 0 0 6px rgba(16,185,129,0); } }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: none; cursor: pointer; font-family: var(--font-body); font-weight: 600;
+  font-size: .9rem; padding: 11px 22px; border-radius: 999px; transition: .25s;
+  white-space: nowrap; position: relative; overflow: hidden;
+}
+.btn-primary { background: var(--ink); color: #fff; }
+.btn-primary:hover { background: var(--coral); transform: translateY(-2px); box-shadow: 0 10px 28px rgba(255,61,129,.35); }
+.btn-ghost { background: transparent; border: 1.5px solid var(--line-2); color: var(--ink); }
+.btn-ghost:hover { border-color: var(--ink); background: var(--surface); }
+.btn-coral { background: var(--coral); color: #fff; }
+.btn-coral:hover { background: #e63a0e; transform: translateY(-2px); box-shadow: 0 10px 28px rgba(255,61,129,.35); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ═══ HERO ═══ */
+.hero {
+  position: relative; z-index: 2;
+  min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
+  padding: 130px clamp(20px, 8vw, 120px) 80px;
+}
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: .78rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--coral); margin-bottom: 22px;
+}
+.eyebrow::before { content: ''; width: 26px; height: 2px; background: var(--coral); }
+.hero h1 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(2.6rem, 7.2vw, 5.6rem); line-height: 1.02; letter-spacing: -.045em;
+  max-width: 1200px;
+}
+.hero h1 .serif { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: -.02em; }
+.hero h1 .accent {
+  background: linear-gradient(120deg, var(--coral), var(--plum) 80%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.typewriter { border-right: 3px solid var(--coral); padding-right: 4px; animation: blink 1s infinite; }
+@keyframes blink { 50% { border-color: transparent; } }
+.hero p { margin-top: 26px; max-width: 620px; font-size: 1.06rem; color: var(--muted); }
+.hero-actions { margin-top: 36px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.hero-trust { margin-top: 18px; font-size: .82rem; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+.hero-trust .avatars { display: flex; }
+.hero-trust .avatars span {
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--bg);
+  margin-left: -8px; display: inline-block;
+}
+.hero-trust .avatars span:nth-child(1) { background: var(--coral); margin-left: 0; }
+.hero-trust .avatars span:nth-child(2) { background: var(--teal); }
+.hero-trust .avatars span:nth-child(3) { background: var(--butter); }
+.hero-trust .avatars span:nth-child(4) { background: var(--plum); }
+
+.hero-stats {
+  margin-top: 64px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+  gap: 24px; max-width: 860px;
+}
+.hero-stat { padding-left: 20px; border-left: 2px solid var(--line-2); }
+.hero-stat:nth-child(1) { border-left-color: var(--coral); }
+.hero-stat:nth-child(2) { border-left-color: var(--teal); }
+.hero-stat:nth-child(3) { border-left-color: var(--butter); }
+.hero-stat .num {
+  font-family: var(--font-display); font-size: 2.3rem; font-weight: 700; letter-spacing: -.04em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hero-stat:nth-child(1) .num { color: var(--coral); }
+.hero-stat:nth-child(2) .num { color: var(--teal); }
+.hero-stat:nth-child(3) .num { color: var(--butter); }
+.hero-stat .label { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+
+/* ═══ MARQUEE ═══ */
+.marquee {
+  position: relative; z-index: 2; overflow: hidden; padding: 24px 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.marquee-track { display: flex; gap: 60px; animation: scroll 40s linear infinite; white-space: nowrap; }
+.marquee-track:hover { animation-play-state: paused; }
+.marquee-item {
+  font-family: var(--font-mono); font-size: .82rem; color: var(--muted); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 12px; text-transform: uppercase; letter-spacing: .08em;
+}
+.marquee-item::before { content: '✦'; color: var(--coral); }
+@keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+/* ═══ SECTIONS ═══ */
+section { position: relative; z-index: 2; padding: 100px clamp(20px, 6vw, 80px); }
+.section-head { max-width: 760px; margin-bottom: 52px; }
+.section-head .tag {
+  font-size: .76rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--teal); margin-bottom: 14px; display: block;
+}
+.section-head h2 {
+  font-family: var(--font-display); font-size: clamp(1.9rem, 3.8vw, 3rem);
+  font-weight: 700; letter-spacing: -.03em; line-height: 1.1;
+}
+.section-head h2 .serif { font-family: var(--font-serif); font-style: italic; font-weight: 400; }
+.section-head p { margin-top: 16px; color: var(--muted); font-size: 1rem; max-width: 580px; }
+
+/* ═══ 4D STORYTELLER ═══ */
+.story-section {
+  position: relative; z-index: 2;
+  padding: 100px clamp(20px, 6vw, 80px);
+  perspective: 1200px;
+}
+.story-header {
+  text-align: center; margin-bottom: 60px;
+}
+.story-header h2 {
+  font-family: var(--font-display); font-size: clamp(2.2rem, 4vw, 3.5rem);
+  font-weight: 700; letter-spacing: -.04em; line-height: 1.1;
+}
+.story-header h2 span {
+  background: linear-gradient(120deg, var(--coral), var(--plum));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.story-header p { color: var(--muted); font-size: 1.1rem; max-width: 600px; margin: 16px auto 0; }
+
+.story-container {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 32px;
+  padding: 48px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  box-shadow: var(--shadow-lg);
+  transform-style: preserve-3d;
+  transition: transform .5s;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+@media (max-width: 900px) { .story-container { grid-template-columns: 1fr; padding: 24px; } }
+
+.story-visual {
+  position: relative; height: 400px;
+  background: var(--bg);
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  transform: translateZ(30px);
+  box-shadow: inset 0 4px 20px rgba(0,0,0,.03);
+}
+.scene {
+  position: absolute; inset: 0;
+  opacity: 0;
+  transform: scale(.85) rotateY(25deg);
+  transition: opacity .8s cubic-bezier(.34,1.56,.64,1), transform .8s cubic-bezier(.34,1.56,.64,1);
+  pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  padding: 30px;
+}
+.scene.active { opacity: 1; transform: scale(1) rotateY(0deg); pointer-events: auto; }
+.scene svg { width: 100%; max-width: 340px; height: auto; }
+
+.story-text {
+  position: relative;
+  display: flex; flex-direction: column; justify-content: center;
+  transform: translateZ(50px);
+}
+.text-scene {
+  position: absolute; inset: 0;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity .6s cubic-bezier(.34,1.56,.64,1), transform .6s cubic-bezier(.34,1.56,.64,1);
+  pointer-events: none;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.text-scene.active { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.text-scene .step-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: .8rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  margin-bottom: 16px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  width: fit-content;
+}
+.step-badge.threat { background: var(--coral-soft); color: #9a1f00; border: 1px solid var(--coral); }
+.step-badge.nist { background: var(--teal-soft); color: #065f46; border: 1px solid var(--teal); }
+.step-badge.problem { background: var(--butter-soft); color: #7c5200; border: 1px solid var(--butter); }
+.step-badge.solution { background: var(--plum-soft); color: #4c1d95; border: 1px solid var(--plum); }
+
+.text-scene h3 {
+  font-family: var(--font-display); font-size: 1.8rem; font-weight: 700;
+  letter-spacing: -.02em; line-height: 1.2; margin-bottom: 16px;
+}
+.text-scene p {
+  color: var(--muted); font-size: 1.02rem; line-height: 1.7;
+  margin-bottom: 20px;
+}
+.proof-box {
+  background: var(--bg);
+  border-left: 4px solid var(--coral);
+  border-radius: 0 14px 14px 0;
+  padding: 16px 20px;
+  font-size: .88rem;
+  color: var(--ink);
+  line-height: 1.6;
+}
+.proof-box strong { color: var(--coral); display: block; margin-bottom: 4px; font-family: var(--font-display); }
+.proof-box.nist-box { border-left-color: var(--teal); }
+.proof-box.nist-box strong { color: var(--teal); }
+.proof-box.problem-box { border-left-color: var(--butter); }
+.proof-box.problem-box strong { color: #b45309; }
+.proof-box.solution-box { border-left-color: var(--plum); }
+.proof-box.solution-box strong { color: var(--plum); }
+
+/* Story Controls */
+.story-controls {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: center;
+  gap: 16px; margin-top: 24px;
+}
+.story-btn {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: .2s;
+}
+.story-btn:hover { border-color: var(--coral); color: var(--coral); transform: scale(1.08); }
+.story-dots { display: flex; gap: 8px; }
+.story-dot {
+  width: 40px; height: 6px;
+  border-radius: 3px;
+  border: none;
+  background: var(--line);
+  cursor: pointer;
+  transition: .3s;
+}
+.story-dot.active { background: var(--coral); box-shadow: 0 0 12px rgba(255,61,129,.4); }
+
+/* ═══ HOW IT WORKS ═══ */
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 20px; }
+.step {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 32px; position: relative;
+  transition: transform .35s cubic-bezier(.22,1,.36,1), box-shadow .35s;
+}
+.step:hover { transform: translateY(-8px); box-shadow: var(--shadow-lg); }
+.step-num {
+  font-family: var(--font-serif); font-style: italic; font-size: 3.4rem; line-height: 1;
+  color: var(--coral); opacity: .9; margin-bottom: 14px;
+}
+.step:nth-child(2) .step-num { color: var(--teal); }
+.step:nth-child(3) .step-num { color: var(--butter); }
+.step h3 { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; margin-bottom: 10px; }
+.step p { font-size: .92rem; color: var(--muted); }
+
+/* ═══ ARCHITECTURE ═══ */
+.arch-shell {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 40px 24px; overflow: hidden; position: relative;
+}
+.arch-svg { width: 100%; height: auto; max-width: 900px; margin: 0 auto; display: block; }
+
+/* ═══ ALGO GRID ═══ */
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; }
+.algo-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 24px; transition: .3s; position: relative; overflow: hidden;
+}
+.algo-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; }
+.algo-card:nth-child(1)::before { background: var(--coral); }
+.algo-card:nth-child(2)::before { background: var(--teal); }
+.algo-card:nth-child(3)::before { background: var(--butter); }
+.algo-card:nth-child(4)::before { background: var(--plum); }
+.algo-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+.algo-card .name { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
+.algo-card .type { font-size: .72rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 18px; font-weight: 600; }
+.algo-card .spec { display: flex; justify-content: space-between; font-size: .85rem; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.algo-card .spec:last-child { border-bottom: none; }
+.algo-card .spec .k { color: var(--muted); }
+.algo-card .spec .v { font-family: var(--font-mono); font-weight: 600; }
+
+/* ═══ FORMULA ═══ */
+.formula-card {
+  background: var(--ink); color: #fff; border-radius: var(--radius);
+  padding: 48px 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center;
+  box-shadow: var(--shadow-lg);
+}
+@media (max-width: 800px) { .formula-card { grid-template-columns: 1fr; padding: 32px 24px; } }
+.formula-card .label { font-size: .78rem; text-transform: uppercase; letter-spacing: .14em; color: var(--butter); font-weight: 600; margin-bottom: 16px; }
+.formula-card h3 { font-family: var(--font-display); font-size: 1.6rem; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; margin-bottom: 16px; }
+.formula-card p { font-size: .92rem; color: rgba(255,255,255,.7); }
+.formula-eq {
+  font-family: var(--font-mono); font-size: clamp(1rem, 2.2vw, 1.4rem);
+  text-align: center; padding: 32px 20px; border: 1px solid rgba(255,255,255,.15);
+  border-radius: var(--radius-sm); background: rgba(255,255,255,.03); line-height: 1.8;
+}
+.formula-eq .q { color: var(--coral); }
+.formula-eq .a { color: var(--butter); }
+.formula-eq .r { color: var(--mint); }
+.formula-eq .op { color: rgba(255,255,255,.5); padding: 0 4px; }
+.formula-eq .small { font-size: .7em; color: rgba(255,255,255,.6); }
+
+/* ═══ DASHBOARD ═══ */
+.dashboard-shell {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 28px; box-shadow: var(--shadow-lg); overflow: hidden;
+}
+.dash-toolbar {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
+  padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--bg-2);
+}
+.toolbar-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.toolbar-group label { font-size: .76rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+select, input[type="range"] {
+  font-family: var(--font-body); font-size: .88rem; border: 1.5px solid var(--line-2);
+  background: var(--surface); border-radius: 10px; padding: 8px 12px; color: var(--ink);
+  outline: none; transition: border-color .2s;
+}
+select:focus { border-color: var(--teal); }
+input[type="range"] { accent-color: var(--coral); }
+.status-pill {
+  padding: 7px 16px; border-radius: 999px; font-size: .76rem; font-weight: 700;
+  background: var(--surface); border: 1px solid var(--line-2); color: var(--muted);
+  transition: .3s; white-space: nowrap;
+}
+.status-pill.running { background: var(--butter-soft); border-color: var(--butter); color: #7c5200; }
+.status-pill.done { background: var(--mint-soft); border-color: var(--mint); color: #065f46; }
+.status-pill.error { background: var(--coral-soft); border-color: var(--coral); color: #9a1f00; }
+
+.dash-grid { display: grid; grid-template-columns: 1fr 1.7fr 1fr; }
+@media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } }
+.dash-col { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.dash-col + .dash-col { border-left: 1px solid var(--line); }
+@media (max-width: 1100px) { .dash-col + .dash-col { border-left: none; border-top: 1px solid var(--line); } }
+
+.col-label {
+  font-size: .74rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); display: flex; justify-content: space-between; align-items: center;
+}
+.col-label .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.dot-orange { background: var(--coral); }
+.dot-mint { background: var(--mint); }
+
+.big-stat { background: var(--bg); border-radius: var(--radius-sm); padding: 18px 20px; position: relative; overflow: hidden; }
+.big-stat .label { font-size: .72rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.big-stat .value { font-family: var(--font-display); font-size: 2rem; font-weight: 700; letter-spacing: -.03em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.big-stat.rr .value { color: var(--coral); }
+.big-stat.ai .value { color: var(--mint); }
+.big-stat .spark { position: absolute; right: 14px; bottom: 14px; width: 60px; height: 24px; opacity: .5; }
+
+.node-list { display: flex; flex-direction: column; gap: 6px; }
+.node-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 14px; border-radius: 10px; background: var(--bg);
+  border: 1.5px solid transparent; font-size: .86rem; transition: .25s;
+}
+.node-row.active { border-color: var(--teal); background: var(--teal-soft); transform: translateX(3px); }
+.node-row .name { color: var(--muted); font-weight: 500; }
+.node-row .lat { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.node-row.active .lat { color: var(--teal); }
+
+.mini-info { font-size: .8rem; color: var(--muted); line-height: 1.6; }
+.mini-info .k { font-weight: 600; color: var(--ink); }
+.heatmap { display: flex; gap: 4px; margin-top: 8px; }
+.heatmap-cell { flex: 1; height: 28px; border-radius: 6px; background: var(--line); position: relative; transition: .4s; display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; color: rgba(255,255,255,.9); }
+
+.ai-reason-box { background: var(--plum-soft); border-radius: var(--radius-sm); padding: 16px; font-size: .8rem; }
+.ai-reason-box .row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.ai-reason-box .row:last-child { margin-bottom: 0; }
+.ai-reason-box .k { color: var(--plum); font-weight: 500; }
+.ai-reason-box .v { font-weight: 600; font-family: var(--font-mono); font-variant-numeric: tabular-nums; max-width: 60%; text-align: right; }
+.mode-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.mode-badge.exploit { background: var(--mint-soft); color: #065f46; }
+.mode-badge.explore { background: var(--butter-soft); color: #7c5200; }
+.q-bars { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.q-bar-row { display: flex; align-items: center; gap: 10px; font-size: .76rem; font-family: var(--font-mono); font-weight: 600; }
+.q-bar-row .lbl { width: 22px; color: var(--muted); }
+.q-track { flex: 1; height: 7px; background: var(--bg); border-radius: 999px; overflow: hidden; }
+.q-fill { height: 100%; width: 0; border-radius: 999px; background: var(--muted); transition: width .6s cubic-bezier(.22,1,.36,1), background .3s; }
+.q-fill.winner { background: linear-gradient(90deg, var(--mint), #34d399); }
+.q-val { width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.chart-wrap { position: relative; height: 300px; width: 100%; }
+
+.log-shell { border-top: 1px solid var(--line); }
+.log-shell summary {
+  cursor: pointer; padding: 16px 24px; font-size: .84rem; font-weight: 600;
+  color: var(--muted); list-style: none; display: flex; justify-content: space-between; align-items: center; transition: color .2s;
+}
+.log-shell summary:hover { color: var(--ink); }
+.log-shell summary::-webkit-details-marker { display: none; }
+.log-shell summary::after { content: '↓'; transition: transform .3s; }
+.log-shell[open] summary::after { transform: rotate(180deg); }
+.table-scroll { max-height: 340px; overflow: auto; padding: 0 24px 24px; }
+table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+th { position: sticky; top: 0; background: var(--surface); text-align: left; padding: 10px 8px; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--line); z-index: 2; }
+td { padding: 10px 8px; border-bottom: 1px solid var(--bg-2); font-variant-numeric: tabular-nums; }
+.tag { padding: 2px 8px; border-radius: 6px; font-size: .68rem; font-weight: 700; }
+.tag.rr { background: var(--coral-soft); color: #9a1f00; }
+.tag.ai { background: var(--mint-soft); color: #065f46; }
+.tag.explore { background: var(--butter-soft); color: #7c5200; }
+.tag.exploit { background: var(--mint-soft); color: #065f46; }
+
+/* ═══ EVAL ═══ */
+.eval-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+@media (max-width: 900px) { .eval-grid { grid-template-columns: 1fr; } }
+.eval-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); }
+.eval-card h3 { font-family: var(--font-display); font-size: 1.06rem; font-weight: 600; margin-bottom: 6px; }
+.eval-card p { font-size: .84rem; color: var(--muted); margin-bottom: 18px; }
+.eval-chart { position: relative; height: 280px; width: 100%; }
+
+/* ═══ FAQ ═══ */
+.faq { display: flex; flex-direction: column; gap: 10px; max-width: 840px; }
+.faq-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; transition: .2s; }
+.faq-item[open] { border-color: var(--teal); box-shadow: var(--shadow); }
+.faq-item summary { cursor: pointer; padding: 18px 24px; font-family: var(--font-display); font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: '+'; font-size: 1.5rem; color: var(--coral); transition: transform .3s; font-family: var(--font-body); }
+.faq-item[open] summary::after { transform: rotate(45deg); }
+.faq-item .content { padding: 0 24px 20px; font-size: .9rem; color: var(--muted); line-height: 1.7; }
+
+/* ═══ FOOTER ═══ */
+footer {
+  position: relative; z-index: 2; padding: 60px clamp(20px, 6vw, 80px) 40px;
+  border-top: 1px solid var(--line); background: var(--bg-2);
+}
+.footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+@media (max-width: 800px) { .footer-top { grid-template-columns: 1fr 1fr; } }
+.footer-brand p { font-size: .88rem; color: var(--muted); margin-top: 12px; max-width: 320px; }
+.footer-col h4 { font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; color: var(--ink); margin-bottom: 14px; font-weight: 700; }
+.footer-col a { display: block; color: var(--muted); text-decoration: none; font-size: .86rem; padding: 4px 0; transition: color .2s; }
+.footer-col a:hover { color: var(--coral); }
+.footer-bottom { display: flex; justify-content: space-between; padding-top: 24px; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted); flex-wrap: wrap; gap: 12px; }
+
+/* ═══ MODAL (GAME) ═══ */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(10,10,10,.6); backdrop-filter: blur(10px);
+  display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px;
+}
+.modal-backdrop.open { display: flex; }
+.game-modal {
+  background: var(--surface); border-radius: 28px; max-width: 1100px; width: 100%;
+  max-height: 95vh; overflow: auto; display: grid; grid-template-columns: 380px 1fr;
+  box-shadow: 0 40px 100px rgba(10,10,10,.4); position: relative;
+}
+@media (max-width: 900px) { .game-modal { grid-template-columns: 1fr; } }
+.game-side { padding: 32px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 20px; overflow-y: auto; background: var(--bg); }
+.game-main { padding: 20px; display: flex; flex-direction: column; gap: 14px; background: var(--bg-2); position: relative; justify-content: center; align-items: center; }
+.close-btn {
+  position: absolute; top: 16px; right: 16px; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
+  transition: .2s; z-index: 10;
+}
+.close-btn:hover { background: var(--coral-soft); color: var(--coral); border-color: var(--coral); }
+.game-side h3 { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; letter-spacing: -.02em; }
+.game-side .hint { font-size: .9rem; color: var(--muted); line-height: 1.6; }
+#gameCanvas { width: 100%; height: 500px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); display: block; box-shadow: var(--shadow); }
+.game-log { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-family: var(--font-mono); font-size: .8rem; color: var(--muted); height: 100px; overflow-y: auto; line-height: 1.6; }
+.game-log strong { color: var(--ink); }
+.qtable-mini { width: 100%; font-size: .85rem; }
+.qtable-mini td { padding: 8px 4px; border-bottom: 1px solid var(--bg-2); }
+.qtable-mini td:last-child { text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--plum); }
+.score-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.score-box { padding: 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); text-align: center; }
+.score-box .lbl { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.score-box .val { font-family: var(--font-display); font-size: 2rem; font-weight: 700; margin-top: 4px; }
+.score-box.you .val { color: var(--coral); }
+.score-box.ai .val { color: var(--mint); }
+.game-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.game-btn {
+  border: none; cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: .9rem;
+  padding: 12px 16px; border-radius: 12px; transition: .2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.game-btn-primary { background: var(--coral); color: #fff; }
+.game-btn-primary:hover { background: #e63a0e; transform: translateY(-2px); }
+.game-btn-ghost { background: var(--bg); color: var(--ink); border: 1.5px solid var(--line-2); }
+.game-btn-ghost:hover { border-color: var(--ink); }
+.game-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+/* ═══ TOAST ═══ */
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 300; display: flex; flex-direction: column; gap: 10px; }
+.toast {
+  background: var(--ink); color: #fff; padding: 14px 20px; border-radius: 12px;
+  font-size: .86rem; font-weight: 500; box-shadow: 0 10px 30px rgba(10,10,10,.3);
+  transform: translateX(120%); transition: transform .35s cubic-bezier(.22,1,.36,1);
+  display: flex; align-items: center; gap: 10px; min-width: 240px;
+}
+.toast.show { transform: translateX(0); }
+.toast.success { border-left: 3px solid var(--mint); }
+.toast.info { border-left: 3px solid var(--butter); }
+.toast.error { border-left: 3px solid var(--coral); }
+
+/* ═══ REVEAL ═══ */
+.reveal { opacity: 0; transform: translateY(30px); transition: opacity .8s cubic-bezier(.22,1,.36,1), transform .8s cubic-bezier(.22,1,.36,1); }
+.reveal.in { opacity: 1; transform: none; }
+.reveal.delay-1 { transition-delay: .1s; }
+.reveal.delay-2 { transition-delay: .2s; }
+.reveal.delay-3 { transition-delay: .3s; }
+
+/* ═══ BRIGHT + 4D OVERRIDES ═══ */
+:root{--bg:#eaf5ff;--bg-2:#dcecff}
+.orb{opacity:.5!important}
+.logo-mark,.nav-logo .mark{background:linear-gradient(135deg,var(--coral),var(--butter))!important;color:#fff!important}
+.btn-primary{background:linear-gradient(120deg,var(--coral),#ff9a1e)!important;color:#fff!important;box-shadow:0 8px 22px rgba(255,61,129,.3)}
+.formula-card{background:linear-gradient(135deg,#6366f1 0%,#ec4899 60%,#fb923c 100%)!important}
+.toast{background:linear-gradient(120deg,var(--teal),var(--mint))!important}
+/* floating 3D rings */
+.fx-rings{position:absolute;inset:0;pointer-events:none;z-index:0;transform-style:preserve-3d;overflow:hidden}
+.fx-rings i{position:absolute;border:5px solid var(--coral);border-radius:50%;opacity:.5;animation:ring 14s linear infinite;transform-style:preserve-3d}
+.fx-rings i:nth-child(1){width:180px;height:180px;left:3%;top:12%}
+.fx-rings i:nth-child(2){width:120px;height:120px;right:6%;top:8%;border-color:var(--teal);animation-duration:10s}
+.fx-rings i:nth-child(3){width:90px;height:90px;left:10%;bottom:8%;border-color:var(--butter);border-radius:22px;animation-duration:12s}
+.fx-rings i:nth-child(4){width:220px;height:220px;right:2%;bottom:6%;border-color:var(--plum);animation-duration:18s}
+.fx-rings i:nth-child(5){width:60px;height:60px;left:48%;top:3%;border-color:var(--mint);border-radius:14px;animation-duration:8s}
+@keyframes ring{from{transform:rotateX(0) rotateY(0) rotateZ(0) translateZ(0)}50%{transform:rotateX(180deg) rotateY(90deg) rotateZ(90deg) translateZ(80px)}to{transform:rotateX(360deg) rotateY(180deg) rotateZ(180deg) translateZ(0)}}
+/* story */
+.story-section{perspective:1400px;overflow:hidden}
+.story-header,.story-container{position:relative;z-index:1}
+.story-container{background:linear-gradient(135deg,#fff,#e8f4ff 50%,#f3e8ff)!important;transform:rotateX(calc(var(--rx,0deg) + var(--sx,0deg))) rotateY(var(--ry,0deg));transition:transform .25s ease-out}
+.story-visual{perspective:900px;background:linear-gradient(160deg,#f0f8ff,#ffe3f1 60%,#e4dcff)!important}
+.scene{transform:translateZ(-240px) rotateY(75deg) scale(.7)!important;transform-origin:50% 50%;transition:opacity .9s,transform .9s cubic-bezier(.2,1.2,.3,1)!important}
+.scene.active{transform:none!important}
+.scene svg{translate:calc(var(--px,0)*22px) calc(var(--py,0)*16px);filter:drop-shadow(0 22px 18px rgba(255,61,129,.28))}
+.scene.active svg{animation:zfloat 6s ease-in-out infinite}
+@keyframes zfloat{0%,100%{transform:rotateY(-14deg) rotateX(4deg) translateZ(0)}50%{transform:rotateY(14deg) rotateX(-4deg) translateZ(50px)}}
+.story-text{perspective:900px}
+.text-scene{transform:translateZ(-80px) rotateX(-45deg) translateY(30px)!important;transform-origin:50% 0}
+.text-scene.active{transform:none!important}
+.story-prog{height:5px;border-radius:9px;background:rgba(0,0,0,.07);margin-top:18px;overflow:hidden}
+.story-prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--coral),var(--butter),var(--teal));animation:prog 8s linear forwards}
+@keyframes prog{to{width:100%}}
+/* architecture 3D */
+.arch-shell{background:linear-gradient(150deg,#fff,#e6f3ff 50%,#fde8f5)!important;overflow:hidden;perspective:1700px}
+.arch-bar{display:flex;gap:8px;justify-content:center;margin-bottom:6px;position:relative;z-index:3}
+.chip-btn{font:600 .8rem var(--font-mono);padding:8px 16px;border-radius:99px;border:2px solid var(--line-2);background:#fff;color:var(--ink);cursor:pointer;transition:.2s}
+.chip-btn.on,.chip-btn:hover{background:var(--coral);border-color:var(--coral);color:#fff}
+.arch-scroll{overflow-x:auto;overflow-y:hidden;padding:4% 0 6%}
+.arch-scene{min-width:700px;max-width:980px;margin:0 auto;container-type:inline-size;perspective:1700px}
+.arch-stage{position:relative;aspect-ratio:900/420;transform-style:preserve-3d;transform:rotateX(var(--ax,50deg)) rotateZ(var(--az,-20deg)) scale(var(--sc,.82))}
+.arch-plane{position:absolute;inset:0;width:100%;height:100%;border-radius:2.4cqw;background:linear-gradient(135deg,#fbfdff,#dcecff);box-shadow:0 5cqw 6cqw rgba(255,61,129,.22),0 0 0 .5cqw #fff;transform:translateZ(0)}
+.a3{position:absolute;transform-style:preserve-3d;transform:translateZ(var(--z));border-radius:1.6cqw;padding:1.1cqw 1.5cqw;background:#fff;border:.35cqw solid var(--c,var(--coral));display:flex;flex-direction:column;justify-content:center;font-family:var(--font-display);transition:transform .35s;box-shadow:.8cqw 1.2cqw 0 rgba(0,0,0,.08)}
+.a3::before{content:'';position:absolute;inset:0;border-radius:inherit;background:var(--c,var(--coral));opacity:.35;filter:blur(1.2cqw);transform:translateZ(calc(var(--z)*-1 + 1px))}
+.a3:hover{transform:translateZ(calc(var(--z) + 40px))}
+.a3 b{font-size:1.9cqw;font-weight:800;letter-spacing:-.01em}.a3 span{font:1.3cqw var(--font-mono);color:var(--muted)}
+.a3 code{display:block;margin-top:1.2cqw;background:linear-gradient(120deg,var(--coral),var(--butter));color:#fff;border-radius:.9cqw;padding:.8cqw;text-align:center;font:700 1.45cqw var(--font-mono)}
+.client{--c:#0891b2}.balancer{--c:#ff3d81;align-items:center;text-align:center;background:linear-gradient(160deg,#fff,#ffe0ee);animation:bz 3.2s ease-in-out infinite}
+@keyframes bz{50%{transform:translateZ(calc(var(--z) + 26px))}}
+.node{--c:#10b981;flex-direction:row;align-items:center;gap:1.4cqw}.node i{width:1.8cqw;height:1.8cqw;border-radius:50%;background:var(--c);flex:none;animation:pulse 1.6s infinite}
+.n2{--c:#ffb703}.n3{--c:#ff3d81}
+.qtable{--c:#7c3aed;background:#ece3ff;align-items:center;text-align:center}.qtable b,.qtable span{color:#7c3aed}
+@keyframes pulse{50%{box-shadow:0 0 0 1cqw transparent;transform:scale(1.35)}}
+@media (prefers-reduced-motion:reduce){.fx-rings i,.scene.active svg,.balancer{animation:none!important}}
+
+/* ═══ ROUND 3: formula, architecture polish, more 4D, story polish ═══ */
+.formula-card{color:#fff}.formula-card p,.formula-card h3{color:#fff!important}.formula-card p code{background:rgba(255,255,255,.25);color:#fff;padding:2px 8px;border-radius:8px}
+.formula-card .label{color:#fff6b8!important}
+.formula-eq{background:#fff!important;border:0!important;color:#1b1340!important;font-weight:700;font-size:clamp(1.05rem,2.5vw,1.65rem)!important;box-shadow:0 20px 50px rgba(30,10,80,.35);transform:perspective(900px) rotateY(-6deg);animation:feq 6s ease-in-out infinite}
+@keyframes feq{50%{transform:perspective(900px) rotateY(6deg) translateZ(20px)}}
+.formula-eq .q{color:#7c3aed!important}.formula-eq .r{color:#059669!important}.formula-eq .op{color:#ff3d81!important;font-weight:800}
+.formula-eq .small{display:block;margin-top:12px;color:#4b4468!important;font-size:.62em!important;font-weight:600}
+.formula-eq .ex{display:block;margin-top:14px;padding:12px;border-radius:14px;background:#f3ecff;color:#3b2a7a;font-size:.55em;line-height:1.7;font-weight:600}
+.upd-line{margin-top:10px;background:#fff;color:var(--plum);border-radius:10px;padding:10px 12px;font:600 .74rem var(--font-mono);word-break:break-word;border:1px dashed var(--plum)}
+/* architecture polish */
+.arch-plane path[stroke-dasharray]{animation:dash 1s linear infinite}@keyframes dash{to{stroke-dashoffset:-20}}
+.arch-plane circle{filter:drop-shadow(0 0 6px currentColor)}
+.a3{background:linear-gradient(160deg,#fff,color-mix(in srgb,var(--c) 14%,#fff))}
+.a3 b{background:linear-gradient(90deg,var(--c),#7c3aed);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.ld{display:block;height:.9cqw;border-radius:9px;background:rgba(0,0,0,.08);margin-top:.7cqw;overflow:hidden;width:16cqw}
+.ld u{display:block;height:100%;width:var(--w);background:linear-gradient(90deg,var(--c),#ffd23f);border-radius:9px;animation:ldg 3s ease-in-out infinite;transform-origin:left}
+@keyframes ldg{0%,100%{transform:scaleX(.75)}50%{transform:scaleX(1)}}
+.orbit{position:absolute;left:42.2%;top:50%;width:30%;aspect-ratio:1;border-radius:50%;border:.4cqw dashed var(--coral);transform-style:preserve-3d;translate:-50% -50%;pointer-events:none}
+.o1{transform:translateZ(110px) rotateX(70deg);animation:osp 9s linear infinite}
+.o2{width:36%;border-color:#7c3aed;transform:translateZ(110px) rotateY(70deg);animation:osp2 12s linear infinite}
+.orbit::after{content:'';position:absolute;left:50%;top:-1.2cqw;width:2.4cqw;height:2.4cqw;border-radius:50%;background:var(--coral);box-shadow:0 0 2cqw var(--coral)}
+@keyframes osp{to{transform:translateZ(110px) rotateX(70deg) rotateZ(360deg)}}@keyframes osp2{to{transform:translateZ(110px) rotateY(70deg) rotateZ(-360deg)}}
+.spark{position:absolute;width:1.6cqw;height:1.6cqw;border-radius:.4cqw;background:linear-gradient(135deg,#ffd23f,#ff3d81);transform:translateZ(var(--z));box-shadow:0 0 1.6cqw #ff3d81;animation:spk 5s ease-in-out infinite}
+@keyframes spk{50%{transform:translateZ(calc(var(--z) + 60px)) rotate(180deg) scale(1.4)}}
+.arch-shell{box-shadow:0 30px 80px rgba(124,58,237,.18)}
+/* real 3D cubes + tilt */
+.tilt{transform-style:preserve-3d;transition:transform .2s ease-out,box-shadow .3s;will-change:transform}
+.reveal{transform:perspective(900px) translateY(50px) rotateX(-14deg) scale(.96);transform-origin:50% 100%}
+.reveal.in{transform:none}
+/* story polish */
+.story-section{background:radial-gradient(60% 50% at 15% 10%,#ffd6ec,transparent),radial-gradient(50% 50% at 90% 30%,#cdeeff,transparent),radial-gradient(50% 60% at 50% 100%,#e5dcff,transparent)}
+.story-container{border:3px solid transparent!important;background:linear-gradient(135deg,rgba(255,255,255,.92),rgba(238,247,255,.92)) padding-box,linear-gradient(120deg,#ff3d81,#ffd23f,#14d98c,#0891b2,#7c3aed,#ff3d81) border-box!important;background-size:100%,300% 300%!important;animation:bord 8s linear infinite;backdrop-filter:blur(8px)}
+@keyframes bord{to{background-position:0 0,300% 0}}
+.story-visual{box-shadow:inset 0 0 60px rgba(124,58,237,.12),0 20px 50px rgba(255,61,129,.18)!important}
+.story-visual::before{content:'';position:absolute;width:300px;height:300px;border-radius:50%;left:50%;top:50%;translate:-50% -50%;background:radial-gradient(circle,rgba(255,61,129,.3),rgba(124,58,237,.12) 55%,transparent 70%);animation:halo 4s ease-in-out infinite}
+@keyframes halo{50%{transform:scale(1.25);opacity:.6}}
+.story-visual::after{content:'';position:absolute;width:340px;height:340px;border-radius:50%;left:50%;top:50%;translate:-50% -50%;border:2px dashed rgba(124,58,237,.35);animation:osp0 20s linear infinite}
+@keyframes osp0{to{transform:rotate(360deg)}}
+.story-text::before{content:attr(data-n);position:absolute;right:-10px;top:-50px;font:800 10rem var(--font-display);line-height:1;color:transparent;-webkit-text-stroke:2px rgba(124,58,237,.2);transform:translateZ(-80px);pointer-events:none;transition:.6s}
+.text-scene.active h3{background:linear-gradient(100deg,#1b1340,#7c3aed 60%,#ff3d81);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.text-scene .step-badge{box-shadow:0 6px 18px rgba(124,58,237,.2);animation:bdg 3s ease-in-out infinite}@keyframes bdg{50%{transform:translateZ(30px) translateY(-3px)}}
+.proof-box{background:linear-gradient(120deg,#fff,#f3ecff);box-shadow:0 10px 26px rgba(124,58,237,.14)}
+.story-dot.active{width:30px!important;border-radius:9px!important;background:linear-gradient(90deg,#ff3d81,#ffd23f)!important}
+</style>
+</head>
+<body>
+
+<div class="scroll-progress" id="scrollProgress"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<nav>
+  <div class="logo"><span class="logo-mark">PQ</span>PQC<em>LB</em></div>
+  <div class="nav-links">
+    <a href="#story">The Story</a>
+    <a href="#how">How it works</a>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#evaluation">Evaluation</a>
+    <span class="live-clock"><span class="dot"></span><span id="clock">--:--:--</span></span>
+    <button class="btn btn-coral" onclick="toggleGame(true)">Play Game</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <span class="eyebrow">Adaptive routing · Q-Learning · ε-Greedy</span>
+  <h1>Route <span class="serif">post-quantum</span> traffic<br>to the <span class="accent"><span class="typewriter" id="typewriter">fastest node</span></span>.</h1>
+  <p>An intelligent load balancer that learns from every request. It routes ML-KEM and ML-DSA workloads using an <b>ε-greedy Q-learning agent (ε=0.30 → 0.05)</b> — balancing exploration and exploitation to find the fastest node.</p>
+  <div class="hero-actions">
+    <button class="btn btn-primary" onclick="document.getElementById('dashboard').scrollIntoView({behavior:'smooth'})">Open live dashboard</button>
+    <button class="btn btn-ghost" onclick="toggleGame(true)">🎮 Play the game</button>
+  </div>
+  <div class="hero-trust">
+    <div class="avatars"><span></span><span></span><span></span><span></span></div>
+    <span>Built on NIST FIPS 203 / 204 · liboqs · FastAPI · Docker</span>
+  </div>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num" data-count="76" data-suffix="%">0%</div><div class="label">Avg Latency reduction vs Round Robin</div></div>
+    <div class="hero-stat"><div class="num" data-count="4" data-suffix="">0</div><div class="label">PQC primitives benchmarked</div></div>
+    <div class="hero-stat"><div class="num" data-count="5" data-suffix="%">0%</div><div class="label">Final Exploration rate (ε = 0.05)</div></div>
+  </div>
+</header>
+
+<!-- MARQUEE -->
+<div class="marquee">
+  <div class="marquee-track" id="marqueeTrack">
+    <span class="marquee-item">ML-KEM-512</span>
+    <span class="marquee-item">ML-KEM-768</span>
+    <span class="marquee-item">ML-DSA-44</span>
+    <span class="marquee-item">ML-DSA-65</span>
+    <span class="marquee-item">NIST FIPS 203</span>
+    <span class="marquee-item">NIST FIPS 204</span>
+    <span class="marquee-item">liboqs</span>
+    <span class="marquee-item">Q-Learning</span>
+    <span class="marquee-item">FastAPI</span>
+    <span class="marquee-item">Docker Compose</span>
+  </div>
+</div>
+
+<!-- ═══ 4D STORYTELLER ═══ -->
+<section id="story" class="story-section">
+  <div class="fx-rings" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="story-header reveal">
+    <h2>The Quantum <span>Challenge</span></h2>
+    <p>A 5-step journey from the quantum threat to the AI-powered routing solution. Use the controls to step through manually, or let it play automatically.</p>
+  </div>
+
+  <div class="story-container reveal">
+    <!-- Visuals -->
+    <div class="story-visual">
+      <!-- Scene 1: Quantum Threat -->
+      <div class="scene active" data-scene="1">
+        <svg viewBox="0 0 300 300">
+          <circle cx="150" cy="150" r="100" fill="none" stroke="var(--coral)" stroke-width="2" stroke-dasharray="6 6" opacity="0.4">
+            <animateTransform attributeName="transform" type="rotate" from="0 150 150" to="360 150 150" dur="20s" repeatCount="indefinite"/>
+          </circle>
+          <rect x="110" y="130" width="80" height="60" rx="10" fill="var(--butter)" stroke="#b45309" stroke-width="4"/>
+          <path d="M 125 130 V 100 A 25 25 0 0 1 175 100 V 130" fill="none" stroke="#b45309" stroke-width="6"/>
+          <circle cx="150" cy="160" r="8" fill="#000"/>
+          <rect x="147" y="160" width="6" height="15" fill="#000"/>
+          <text x="150" y="230" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="12" fill="var(--muted)">RSA-2048</text>
+        </svg>
+      </div>
+      <!-- Scene 2: NIST Response -->
+      <div class="scene" data-scene="2">
+        <svg viewBox="0 0 300 300">
+          <path d="M 150 60 L 220 100 V 160 Q 220 220 150 250 Q 80 220 80 160 V 100 Z" fill="var(--teal-soft)" stroke="var(--teal)" stroke-width="5" stroke-dasharray="600" stroke-dashoffset="600">
+            <animate attributeName="stroke-dashoffset" from="600" to="0" dur="1.5s" fill="freeze"/>
+          </path>
+          <text x="150" y="155" text-anchor="middle" font-family="var(--font-display)" font-weight="800" font-size="18" fill="var(--teal)">ML-KEM</text>
+          <text x="150" y="180" text-anchor="middle" font-family="var(--font-display)" font-weight="800" font-size="18" fill="var(--teal)">ML-DSA</text>
+          <text x="150" y="285" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="11" fill="var(--teal)">NIST FIPS 203 / 204</text>
+        </svg>
+      </div>
+      <!-- Scene 3: Performance Cost -->
+      <div class="scene" data-scene="3">
+        <svg viewBox="0 0 300 300">
+          <line x1="30" y1="240" x2="270" y2="240" stroke="var(--line)" stroke-width="4" stroke-linecap="round"/>
+          <rect x="60" y="180" width="40" height="60" fill="var(--mint)" rx="6"/>
+          <rect x="130" y="120" width="40" height="120" fill="var(--butter)" rx="6"/>
+          <rect x="200" y="80" width="40" height="160" fill="var(--coral)" rx="6"/>
+          <text x="80" y="260" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="11" fill="var(--muted)">5ms</text>
+          <text x="150" y="260" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="11" fill="var(--muted)">100ms</text>
+          <text x="220" y="260" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="11" fill="var(--muted)">200ms</text>
+          <circle cx="80" cy="170" r="10" fill="var(--coral)" stroke="#fff" stroke-width="2">
+            <animate attributeName="cx" values="80;150;220;80" dur="4s" repeatCount="indefinite"/>
+            <animate attributeName="cy" values="170;110;70;170" dur="4s" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+      </div>
+      <!-- Scene 4: Routing Bottleneck -->
+      <div class="scene" data-scene="4">
+        <svg viewBox="0 0 300 300">
+          <rect x="30" y="130" width="60" height="40" rx="8" fill="var(--ink)"/>
+          <text x="60" y="155" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="10" fill="#fff">RR</text>
+          <path d="M 90 150 L 130 100" stroke="var(--coral)" stroke-width="3" stroke-dasharray="4 4"/>
+          <path d="M 90 150 L 130 150" stroke="var(--coral)" stroke-width="3" stroke-dasharray="4 4"/>
+          <path d="M 90 150 L 130 200" stroke="var(--coral)" stroke-width="3" stroke-dasharray="4 4"/>
+          <circle cx="160" cy="100" r="20" fill="var(--coral)" opacity="0.3"/>
+          <text x="160" y="104" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="9" fill="#fff">SLOW</text>
+          <circle cx="160" cy="150" r="20" fill="var(--butter)" opacity="0.3"/>
+          <text x="160" y="154" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="9" fill="#fff">MED</text>
+          <circle cx="160" cy="200" r="20" fill="var(--mint)" opacity="0.3"/>
+          <text x="160" y="204" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="9" fill="#fff">FAST</text>
+          <text x="150" y="280" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="11" fill="var(--coral)">BLIND CYCLING = BOTTLENECK</text>
+        </svg>
+      </div>
+      <!-- Scene 5: AI Solution -->
+      <div class="scene" data-scene="5">
+        <svg viewBox="0 0 300 300">
+          <rect x="30" y="80" width="120" height="140" rx="16" fill="var(--surface)" stroke="var(--plum)" stroke-width="3"/>
+          <text x="90" y="110" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="12" fill="var(--plum)">Q-TABLE</text>
+          <rect x="45" y="130" width="90" height="24" rx="6" fill="rgba(16,185,129,0.2)"/>
+          <text x="90" y="146" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="11" fill="var(--mint)">N1 · Q=155</text>
+          <rect x="45" y="160" width="90" height="24" rx="6" fill="#f1f5f9"/>
+          <text x="90" y="176" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="11" fill="var(--muted)">N2 · Q=132</text>
+          <path d="M 160 150 Q 200 120 230 120" fill="none" stroke="var(--mint)" stroke-width="4" stroke-dasharray="6 6">
+             <animate attributeName="stroke-dashoffset" from="24" to="0" dur="1s" repeatCount="indefinite"/>
+          </path>
+          <circle cx="250" cy="120" r="35" fill="var(--mint)" stroke="#fff" stroke-width="5">
+            <animate attributeName="r" values="35;40;35" dur="1.5s" repeatCount="indefinite"/>
+          </circle>
+          <text x="250" y="126" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="16" fill="#fff">N1</text>
+          <text x="150" y="280" text-anchor="middle" font-family="var(--font-mono)" font-weight="bold" font-size="11" fill="var(--mint)">AI ROUTES TO FASTEST NODE</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Text Content -->
+    <div class="story-text">
+      <!-- Scene 1 -->
+      <div class="text-scene active" data-scene="1">
+        <span class="step-badge threat">🚨 Threat</span>
+        <h3>The Quantum Break</h3>
+        <p>In 1994, Peter Shor proved that a sufficiently powerful quantum computer running his algorithm could break RSA and ECC in hours — the algorithms protecting every HTTPS session today.</p>
+        <div class="proof-box">
+          <strong>Proof:</strong> Gartner forecasts quantum computers will defeat RSA and ECC as early as 2029. Gidney &amp; Ekerå (2019) estimated RSA-2048 could be factored in about 8 hours with 20 million noisy qubits; Gidney (2025) cut that to under 1 million qubits in under a week.
+        </div>
+      </div>
+      <!-- Scene 2 -->
+      <div class="text-scene" data-scene="2">
+        <span class="step-badge nist">🛡️ NIST Response</span>
+        <h3>The Lattice Defense</h3>
+        <p>To counter the threat, NIST standardized new lattice-based algorithms: ML-KEM for key exchange and ML-DSA for digital signatures. These resist quantum attacks.</p>
+        <div class="proof-box nist-box">
+          <strong>Proof:</strong> On August 13, 2024, NIST officially released FIPS 203 (ML-KEM) and FIPS 204 (ML-DSA) as the global standards for post-quantum cryptography.
+        </div>
+      </div>
+      <!-- Scene 3 -->
+      <div class="text-scene" data-scene="3">
+        <span class="step-badge problem">🐢 Performance Cost</span>
+        <h3>Secure, But Heavy</h3>
+        <p>PQC is mathematically secure, but computationally expensive. In a cluster of servers, hardware variance means some nodes are far slower than others. Signature algorithms like ML-DSA are particularly heavy.</p>
+        <div class="proof-box problem-box">
+          <strong>Proof:</strong> Our own benchmarks show ML-DSA-65 has a P95 latency of 679µs, while ML-KEM-512 is only 89µs. Blind routing guarantees wasted time on slow nodes.
+        </div>
+      </div>
+      <!-- Scene 4 -->
+      <div class="text-scene" data-scene="4">
+        <span class="step-badge problem">⚖️ Routing Bottleneck</span>
+        <h3>Round Robin Fails</h3>
+        <p>Traditional Round-Robin load balancers blindly cycle through every node, regardless of its speed. In a heterogeneous cluster, this drags average latency up and creates bottlenecks.</p>
+        <div class="proof-box problem-box">
+          <strong>Proof:</strong> Research on heterogeneous Kubernetes clusters shows traditional scheduling strategies fail to optimize latency-sensitive applications, leading to SLO violations.
+        </div>
+      </div>
+      <!-- Scene 5 -->
+      <div class="text-scene" data-scene="5">
+        <span class="step-badge solution">🧠 AI Solution</span>
+        <h3>Q-Learning Router</h3>
+        <p>We built a Q-Learning agent. It explores the cluster, measures node latencies, and updates its Q-Table. As ε decays from 0.30 to 0.05, it increasingly exploits the fastest node, cutting latency dramatically.</p>
+        <div class="proof-box solution-box">
+          <strong>Proof:</strong> By balancing exploration and exploitation, our AI load balancer reduces mean latency by 76% compared to Round Robin. Reinforcement learning schedulers have been shown to reduce latency significantly even in complex Kubernetes environments.
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="story-controls">
+      <button class="story-btn" onclick="stepStory(-1)">‹</button>
+      <button class="story-btn" id="playPauseBtn" onclick="toggleStoryPlay()">⏸</button>
+      <div class="story-dots">
+        <button class="story-dot active" onclick="setStoryScene(1)"></button>
+        <button class="story-dot" onclick="setStoryScene(2)"></button>
+        <button class="story-dot" onclick="setStoryScene(3)"></button>
+        <button class="story-dot" onclick="setStoryScene(4)"></button>
+        <button class="story-dot" onclick="setStoryScene(5)"></button>
+      </div>
+      <button class="story-btn" onclick="stepStory(1)">›</button>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="section-head reveal">
+    <span class="tag">The pipeline</span>
+    <h2>Three steps. <span class="serif">One adaptive router.</span></h2>
+    <p>Every request flows through a stateless balancer that consults the agent's learned Q-table before dispatching to a worker node.</p>
+  </div>
+  <div class="steps">
+    <div class="step reveal">
+      <div class="step-num">01</div>
+      <h3>Request arrives</h3>
+      <p>A client sends a PQC algorithm request. The balancer maps the algorithm to a state <code>(algo_type, security_level)</code>.</p>
+    </div>
+    <div class="step reveal delay-1">
+      <div class="step-num">02</div>
+      <h3>Agent selects node</h3>
+      <p>The Q-learning agent evaluates the Q-table for that state and picks the node with the maximum value, factoring in a 5% chance to explore (ε = 0.05).</p>
+    </div>
+    <div class="step reveal delay-2">
+      <div class="step-num">03</div>
+      <h3>Reward &amp; update</h3>
+      <p>After measuring latency, the Q-value is updated with the standard formula. The next request benefits from what the agent just learned.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="architecture">
+  <div class="section-head reveal">
+    <span class="tag">System diagram</span>
+    <h2>How the pieces <span class="serif">fit together</span>.</h2>
+    <p>A live 3D model of the system: requests travel as glowing packets from client to balancer to the node the Q-table picks. Move your mouse to orbit it.</p>
+  </div>
+  <div class="arch-shell reveal">
+    <div class="arch-bar"><button class="chip-btn on" data-av="orbit">◎ Orbit</button><button class="chip-btn" data-av="iso">◆ Isometric</button><button class="chip-btn" data-av="flat">▭ Flat</button></div>
+    <div class="arch-scroll"><div class="arch-scene" id="archScene">
+      <div class="arch-stage" id="archStage">
+        <svg class="arch-plane" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#cfe4fb" stroke-width="1"/></pattern>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ff3d81"/></marker>
+          </defs>
+          <rect width="900" height="420" fill="url(#grid)"/>
+          <path id="p0" d="M180 210 L 280 210" stroke="#ff3d81" stroke-width="3" stroke-dasharray="6,4" marker-end="url(#arr)" fill="none"/>
+          <path id="p1" d="M480 175 L 620 110" stroke="#10b981" stroke-width="3" stroke-dasharray="6,4" marker-end="url(#arr)" fill="none"/>
+          <path id="p2" d="M480 210 L 620 210" stroke="#ffb703" stroke-width="3" stroke-dasharray="6,4" marker-end="url(#arr)" fill="none"/>
+          <path id="p3" d="M480 245 L 620 310" stroke="#ff3d81" stroke-width="3" stroke-dasharray="6,4" marker-end="url(#arr)" fill="none"/>
+          <text x="230" y="195" text-anchor="middle" font-family="JetBrains Mono" font-size="12" fill="#ff3d81" font-weight="bold">/route</text>
+          <g class="pk"><circle r="7" fill="#ff3d81"><animateMotion dur="1.6s" repeatCount="indefinite" begin="0s"><mpath href="#p0"/></animateMotion></circle></g>
+          <circle r="7" fill="#10b981"><animateMotion dur="1.6s" begin="1.6s;pk1.end+4.8s" repeatCount="1" id="pk1" keyPoints="0;1" keyTimes="0;1"><mpath href="#p1"/></animateMotion><animate attributeName="opacity" values="0;1;1;0" dur="1.6s" begin="1.6s;pk1.end+4.8s"/></circle>
+          <circle r="7" fill="#ffb703"><animateMotion dur="1.6s" begin="3.2s;pk2.end+4.8s" repeatCount="1" id="pk2"><mpath href="#p2"/></animateMotion><animate attributeName="opacity" values="0;1;1;0" dur="1.6s" begin="3.2s;pk2.end+4.8s"/></circle>
+          <circle r="7" fill="#ff3d81"><animateMotion dur="1.6s" begin="4.8s;pk3.end+4.8s" repeatCount="1" id="pk3"><mpath href="#p3"/></animateMotion><animate attributeName="opacity" values="0;1;1;0" dur="1.6s" begin="4.8s;pk3.end+4.8s"/></circle>
+        </svg>
+        <div class="a3 client" style="left:4.44%;top:41.67%;width:15.56%;height:16.67%;--z:34px"><b>CLIENT</b><span>HTTP POST</span></div>
+        <div class="a3 balancer" style="left:31.11%;top:33.33%;width:22.22%;height:33.33%;--z:70px"><b>BALANCER</b><span>Q-Learning Agent</span><code>argmax Q(s, a)</code></div>
+        <div class="a3 node n1" style="left:68.89%;top:19.05%;width:25.56%;height:15.48%;--z:44px"><i></i><div><b>Node 1</b><span>0 ms delay · fast</span><em class="ld"><u style="--w:86%"></u></em></div></div>
+        <div class="a3 node n2" style="left:68.89%;top:41.67%;width:25.56%;height:15.48%;--z:44px"><i></i><div><b>Node 2</b><span>100 ms delay · medium</span><em class="ld"><u style="--w:38%"></u></em></div></div>
+        <div class="a3 node n3" style="left:68.89%;top:64.29%;width:25.56%;height:15.48%;--z:44px"><i></i><div><b>Node 3</b><span>200 ms delay · slow</span><em class="ld"><u style="--w:14%"></u></em></div></div>
+        <div class="orbit o1"></div><div class="orbit o2"></div>
+        <div class="spark" style="left:12%;top:20%;--z:90px"></div><div class="spark" style="left:30%;top:80%;--z:120px;animation-delay:-1s"></div><div class="spark" style="left:55%;top:12%;--z:140px;animation-delay:-2s"></div><div class="spark" style="left:78%;top:68%;--z:100px;animation-delay:-3s"></div><div class="spark" style="left:92%;top:30%;--z:130px;animation-delay:-4s"></div><div class="spark" style="left:5%;top:70%;--z:110px;animation-delay:-5s"></div>
+        <div class="a3 qtable" style="left:31.11%;top:73.81%;width:22.22%;height:16.67%;--z:20px"><b>Q-table (per state)</b><span>3 actions × 4 states</span></div>
+      </div>
+    </div></div>
+  </div>
+</section>
+
+<!-- ALGORITHMS -->
+<section id="algorithms">
+  <div class="section-head reveal">
+    <span class="tag">PQC primitives</span>
+    <h2>Four algorithms, <span class="serif">two families</span>.</h2>
+    <p>ML-KEM handles key encapsulation; ML-DSA handles digital signatures. Both are NIST-standardized for the post-quantum era.</p>
+  </div>
+  <div class="algo-grid">
+    <div class="algo-card reveal">
+      <div class="name">ML-KEM-512</div>
+      <div class="type">Key Encapsulation · Level 1</div>
+      <div class="spec"><span class="k">Mean latency</span><span class="v">68.34 µs</span></div>
+      <div class="spec"><span class="k">P95 latency</span><span class="v">89.82 µs</span></div>
+      <div class="spec"><span class="k">Keygen</span><span class="v">28.10 µs</span></div>
+    </div>
+    <div class="algo-card reveal delay-1">
+      <div class="name">ML-KEM-768</div>
+      <div class="type">Key Encapsulation · Level 3</div>
+      <div class="spec"><span class="k">Mean latency</span><span class="v">100.05 µs</span></div>
+      <div class="spec"><span class="k">P95 latency</span><span class="v">137.36 µs</span></div>
+      <div class="spec"><span class="k">Keygen</span><span class="v">39.65 µs</span></div>
+    </div>
+    <div class="algo-card reveal delay-2">
+      <div class="name">ML-DSA-44</div>
+      <div class="type">Digital Signature · Level 2</div>
+      <div class="spec"><span class="k">Mean latency</span><span class="v">207.91 µs</span></div>
+      <div class="spec"><span class="k">P95 latency</span><span class="v">397.23 µs</span></div>
+      <div class="spec"><span class="k">Keygen</span><span class="v">55.00 µs</span></div>
+    </div>
+    <div class="algo-card reveal delay-3">
+      <div class="name">ML-DSA-65</div>
+      <div class="type">Digital Signature · Level 3</div>
+      <div class="spec"><span class="k">Mean latency</span><span class="v">343.94 µs</span></div>
+      <div class="spec"><span class="k">P95 latency</span><span class="v">679.52 µs</span></div>
+      <div class="spec"><span class="k">Keygen</span><span class="v">85.46 µs</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- FORMULA -->
+<section id="formula">
+  <div class="section-head reveal">
+    <span class="tag">The math</span>
+    <h2>Q-learning, <span class="serif">kept simple</span>.</h2>
+  </div>
+  <div class="formula-card reveal">
+    <div>
+      <div class="label">The update rule</div>
+      <h3>Every request makes the agent a little smarter.</h3>
+      <p>The agent learns from the reward <code>r = 1000 / (latency + 1)</code>. Faster responses yield higher rewards, so the Q-value for the winning node climbs faster than the others. We use <b>ε-Greedy (ε=0.30 → 0.05)</b>, so it mostly exploits the best node but occasionally explores others.</p>
+    </div>
+    <div class="formula-eq">
+      <span class="q">Q(s,a)</span> <span class="op">←</span> <span class="q">Q(s,a)</span> <span class="op">+</span> α <span class="op">·</span> [ <span class="r">r</span> <span class="op">−</span> <span class="q">Q(s,a)</span> ]<br>
+      <span class="small">α = 0.5 · r = 1000 / (latency + 1)</span><span class="ex">Example: Q = 500, latency = 10 ms → r = 90.9<br>Q ← 500 + 0.5 × (90.9 − 500) = <b>295.5</b></span>
+    </div>
+  </div>
+</section>
+
+<!-- DASHBOARD -->
+<section id="dashboard">
+  <div class="section-head reveal">
+    <span class="tag">Live dashboard</span>
+    <h2>Round Robin vs Q-Learning, <span class="serif">in real time</span>.</h2>
+    <p>Every request is sent twice. Watch the log fill, the Q-values climb, and the AI pull ahead.</p>
+  </div>
+  <div class="dashboard-shell reveal">
+    <div class="dash-toolbar">
+      <div class="toolbar-group">
+        <label>Algorithm</label>
+        <select id="algorithm">
+          <option>ML-KEM-512</option>
+          <option selected>ML-KEM-768</option>
+          <option>ML-DSA-44</option>
+          <option>ML-DSA-65</option>
+        </select>
+      </div>
+      <div class="toolbar-group">
+        <label>Requests</label>
+        <input type="range" id="numReq" min="10" max="100" step="10" value="30" />
+        <span id="reqLabel" style="font-family:var(--font-mono);font-weight:600;">30</span>
+      </div>
+      <div class="toolbar-group">
+        <button class="btn btn-primary" id="runBtn">▶ Run simulation</button>
+        <button class="btn btn-ghost" id="resetBtn">Reset</button>
+        <button class="btn btn-ghost" id="downloadBtn">⬇ Export CSV</button>
+        <span class="status-pill" id="statusBadge">Idle</span>
+      </div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-col">
+        <div class="col-label"><span><span class="dot dot-orange"></span>Round Robin</span><span style="font-weight:500;text-transform:none;letter-spacing:0;">baseline</span></div>
+        <div class="big-stat rr">
+          <div class="label">Average latency</div>
+          <div class="value" id="rrAvg">—</div>
+          <canvas class="spark" id="rrSpark" width="60" height="24"></canvas>
+        </div>
+        <div class="node-list" id="rrNodes">
+          <div class="node-row"><span class="name">Node 1 (fast)</span><span class="lat">—</span></div>
+          <div class="node-row"><span class="name">Node 2 (medium)</span><span class="lat">—</span></div>
+          <div class="node-row"><span class="name">Node 3 (slow)</span><span class="lat">—</span></div>
+        </div>
+        <div class="heatmap" id="rrHeatmap">
+          <div class="heatmap-cell">N1</div>
+          <div class="heatmap-cell">N2</div>
+          <div class="heatmap-cell">N3</div>
+        </div>
+        <div class="mini-info">
+          <span class="k">Current:</span> <span id="rrReq">—</span><br>
+          <span class="k">Strategy:</span> Sequential cycling
+        </div>
+      </div>
+      <div class="dash-col">
+        <div class="col-label"><span>Latency comparison</span><span style="font-weight:500;text-transform:none;letter-spacing:0;">ms per request</span></div>
+        <div class="chart-wrap"><canvas id="liveChart"></canvas></div>
+        <div class="mini-info" style="margin-top:2px;">When the AI has learned, the green line drops toward the fastest node.</div>
+      </div>
+      <div class="dash-col">
+        <div class="col-label"><span><span class="dot dot-mint"></span>Q-Learning</span><span style="font-weight:500;text-transform:none;letter-spacing:0;">ε = 0.05</span></div>
+        <div class="big-stat ai">
+          <div class="label">Average latency</div>
+          <div class="value" id="aiAvg">—</div>
+          <canvas class="spark" id="aiSpark" width="60" height="24"></canvas>
+        </div>
+        <div class="node-list" id="aiNodes">
+          <div class="node-row"><span class="name">Node 1 (fast)</span><span class="lat">—</span></div>
+          <div class="node-row"><span class="name">Node 2 (medium)</span><span class="lat">—</span></div>
+          <div class="node-row"><span class="name">Node 3 (slow)</span><span class="lat">—</span></div>
+        </div>
+        <div class="heatmap" id="aiHeatmap">
+          <div class="heatmap-cell">N1</div>
+          <div class="heatmap-cell">N2</div>
+          <div class="heatmap-cell">N3</div>
+        </div>
+        <div class="ai-reason-box">
+          <div class="row"><span class="k">State</span><span class="v" id="aiState">—</span></div>
+          <div class="row"><span class="k">Mode</span><span class="mode-badge exploit" id="aiMode">—</span></div>
+          <div class="row"><span class="k">Reason</span><span class="v" id="aiReason" style="font-weight:500;font-size:.74rem;">—</span></div>
+          <div class="upd-line" id="aiUpd">Q ← Q + 0.5 × (r − Q)</div>
+          <div class="q-bars">
+            <div class="q-bar-row"><span class="lbl">N1</span><div class="q-track"><div class="q-fill" id="q1"></div></div><span class="q-val" id="q1v">—</span></div>
+            <div class="q-bar-row"><span class="lbl">N2</span><div class="q-track"><div class="q-fill" id="q2"></div></div><span class="q-val" id="q2v">—</span></div>
+            <div class="q-bar-row"><span class="lbl">N3</span><div class="q-track"><div class="q-fill" id="q3"></div></div><span class="q-val" id="q3v">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <details class="log-shell">
+      <summary>Execution log <span style="font-weight:400;color:var(--muted);font-size:.78rem;">— expand to inspect every request</span></summary>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>#</th><th>Strategy</th><th>Node</th><th>Latency</th><th>Crypto</th><th>Mode</th><th>Reward</th><th>Q update</th></tr></thead>
+          <tbody id="logBody"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">Run the simulation to populate the log.</td></tr></tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- EVALUATION -->
+<section id="evaluation">
+  <div class="section-head reveal">
+    <span class="tag">Experimental evaluation</span>
+    <h2>Measured, <span class="serif">not claimed</span>.</h2>
+  </div>
+  <div class="eval-grid">
+    <div class="eval-card reveal">
+      <h3>PQC primitives — full cycle</h3>
+      <p>Keygen + encap/sign + decap/verify, in microseconds.</p>
+      <div class="eval-chart"><canvas id="benchChart"></canvas></div>
+    </div>
+    <div class="eval-card reveal delay-1">
+      <h3>Router efficiency — RR vs Q-Learning</h3>
+      <p>Mean latency in milliseconds across four algorithms.</p>
+      <div class="eval-chart"><canvas id="expChart"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="section-head reveal">
+    <span class="tag">Questions</span>
+    <h2>Things people <span class="serif">ask</span>.</h2>
+  </div>
+  <div class="faq">
+    <details class="faq-item reveal">
+      <summary>What is Post-Quantum Cryptography?</summary>
+      <div class="content">PQC refers to cryptographic algorithms that resist attacks from quantum computers. RSA and ECC — the algorithms powering HTTPS today — will be breakable by large-scale quantum machines. ML-KEM (based on Kyber) and ML-DSA (based on Dilithium) are the NIST-standardized replacements.</div>
+    </details>
+    <details class="faq-item reveal delay-1">
+      <summary>Why Q-Learning instead of Round Robin?</summary>
+      <div class="content">Round Robin assumes all nodes are equal. In a heterogeneous cluster, some nodes are far slower than others. Round Robin keeps them all in rotation, dragging average latency up. Q-learning learns the fastest node and keeps sending traffic there.</div>
+    </details>
+    <details class="faq-item reveal delay-2">
+      <summary>Why use ε-Greedy (ε = 0.30 → 0.05)?</summary>
+      <div class="content">The agent needs to explore the cluster initially to find the fastest node, so ε starts at 0.30. Over time, it decays to 0.05 to focus on exploitation. This 5% minimum ensures that if a node becomes slow or a new node is added, the agent can still adapt. It is a known trade-off: the 5% exploration is why mean latency improves by 76%, but P95 tail latency improves slightly less (10-20%).</div>
+    </details>
+    <details class="faq-item reveal delay-3">
+      <summary>How is this deployed in production?</summary>
+      <div class="content">The entire stack is containerized using Docker and Docker Compose. The balancer and worker nodes are deployed as separate microservices. In a real production environment, this would be orchestrated via Kubernetes, with the Q-Learning agent persisting its Q-table to a shared Redis instance to survive pod restarts.</div>
+    </details>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <div class="logo"><span class="logo-mark">PQ</span>PQC<em>LB</em></div>
+      <p>An intelligent load balancer for the post-quantum era. Built with liboqs, FastAPI, and Q-learning.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <a href="#dashboard">Live dashboard</a>
+      <a href="#evaluation">Evaluation</a>
+      <a href="#architecture">Architecture</a>
+    </div>
+    <div class="footer-col">
+      <h4>Algorithms</h4>
+      <a href="#algorithms">ML-KEM-512</a>
+      <a href="#algorithms">ML-KEM-768</a>
+      <a href="#algorithms">ML-DSA-44</a>
+      <a href="#algorithms">ML-DSA-65</a>
+    </div>
+    <div class="footer-col">
+      <h4>Resources</h4>
+      <a href="https://open-quantum-safe.org/" target="_blank">liboqs</a>
+      <a href="https://www.nist.gov/pqcrypto" target="_blank">NIST PQC</a>
+      <a href="https://fastapi.tiangolo.com/" target="_blank">FastAPI</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 AI Driven PQC Load Balancer</span>
+    <span>ε = 0.30 → 0.05 · α = 0.5 · reward = 1000 / (latency + 1)</span>
+  </div>
+</footer>
+
+<!-- GAME MODAL -->
+<div class="modal-backdrop" id="gameModal">
+  <div class="game-modal">
+    <button class="close-btn" onclick="toggleGame(false)">×</button>
+    <div class="game-side">
+      <h3>You vs. the AI</h3>
+      <p class="hint">Can you beat the Q-learning agent? In each round, you and the AI will route a packet simultaneously. The lowest latency wins the round. Let's see who gets the highest score!</p>
+      
+      <div class="score-row">
+        <div class="score-box you"><div class="lbl">You</div><div class="val" id="scoreYou">0</div></div>
+        <div class="score-box ai"><div class="lbl">AI</div><div class="val" id="scoreAI">0</div></div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+        <label style="font-size:.85rem; font-weight:700; color:var(--muted);">Number of Rounds:</label>
+        <select id="roundCount" style="width:100%;">
+          <option value="3">3 Rounds</option>
+          <option value="5" selected>5 Rounds</option>
+          <option value="10">10 Rounds</option>
+        </select>
+        <button class="game-btn game-btn-primary" id="btnStartMatch" onclick="startMatch()" style="margin-top:8px;">▶ Start Match</button>
+      </div>
+
+      <div style="font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:16px; text-align:center;">Choose your node</div>
+      <div class="game-actions" style="grid-template-columns: 1fr 1fr 1fr;">
+        <button class="game-btn game-btn-ghost" onclick="userPickNode(0)" id="btnPick1" disabled>Node 1</button>
+        <button class="game-btn game-btn-ghost" onclick="userPickNode(1)" id="btnPick2" disabled>Node 2</button>
+        <button class="game-btn game-btn-ghost" onclick="userPickNode(2)" id="btnPick3" disabled>Node 3</button>
+      </div>
+
+      <button class="game-btn game-btn-ghost" onclick="resetGame()" style="justify-content:center; border-color:var(--coral); color:var(--coral); margin-top:12px;">↻ Reset AI Memory</button>
+
+      <div>
+        <div style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px; margin-top:16px;">Q-table</div>
+        <table class="qtable-mini">
+          <tr><td>Node 1 (0 ms)</td><td id="gq1">500.0</td></tr>
+          <tr><td>Node 2 (100 ms)</td><td id="gq2">500.0</td></tr>
+          <tr><td>Node 3 (200 ms)</td><td id="gq3">500.0</td></tr>
+        </table>
+      </div>
+      <div class="game-log" id="gameLog">Ready to start the match.</div>
+    </div>
+    <div class="game-main">
+      <canvas id="gameCanvas" width="700" height="500"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ═══ UTILITIES ═══ */
+const $ = id => document.getElementById(id);
+const setText = (id, v) => { if ($(id)) $(id).textContent = v; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const API = 'http://localhost:8050';
+let serverOnline = false;
+
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  $('toastContainer').appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, 3200);
+}
+
+/* ═══ SERVER HEALTH CHECK ═══ */
+async function checkServer() {
+  try {
+    const res = await fetch(API + '/stats', { method: 'GET', timeout: 3000 });
+    if (res.ok) {
+      serverOnline = true;
+      $('statusBadge').className = 'status-pill done';
+      $('statusBadge').textContent = 'Server Online';
+      toast('Backend connected successfully', 'success');
+    } else {
+      throw new Error('Server returned ' + res.status);
+    }
+  } catch (e) {
+    serverOnline = false;
+    $('statusBadge').className = 'status-pill error';
+    $('statusBadge').textContent = 'Server Offline';
+    toast('Backend is offline. Please start the Docker containers.', 'error');
+    $('runBtn').disabled = true;
+  }
+}
+setTimeout(checkServer, 1000);
+
+/* ═══ SCROLL PROGRESS ═══ */
+window.addEventListener('scroll', () => {
+  const h = document.documentElement;
+  const pct = (h.scrollTop / (h.scrollHeight - h.clientHeight)) * 100;
+  $('scrollProgress').style.width = pct + '%';
+});
+
+/* ═══ LIVE CLOCK ═══ */
+setInterval(() => {
+  const d = new Date();
+  $('clock').textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2,'0')).join(':');
+}, 1000);
+
+/* ═══ TYPEWRITER ═══ */
+const words = ['fastest node.', 'lowest latency.', 'maximum reward.', 'optimal path.'];
+let wi = 0, ci = 0, deleting = false;
+function typeLoop() {
+  const el = $('typewriter');
+  if (!el) return;
+  const word = words[wi];
+  if (!deleting) {
+    el.textContent = word.slice(0, ++ci);
+    if (ci === word.length) { deleting = true; setTimeout(typeLoop, 1600); return; }
+  } else {
+    el.textContent = word.slice(0, --ci);
+    if (ci === 0) { deleting = false; wi = (wi + 1) % words.length; }
+  }
+  setTimeout(typeLoop, deleting ? 40 : 80);
+}
+setTimeout(typeLoop, 500);
+
+/* ═══ ANIMATED COUNTERS ═══ */
+const counterObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting && !e.target.dataset.done) {
+      e.target.dataset.done = '1';
+      const target = parseInt(e.target.dataset.count, 10);
+      const suffix = e.target.dataset.suffix || '';
+      let cur = 0;
+      const step = target / 40;
+      const tick = () => {
+        cur = Math.min(cur + step, target);
+        e.target.textContent = Math.round(cur) + suffix;
+        if (cur < target) requestAnimationFrame(tick);
+      };
+      tick();
+    }
+  });
+}, { threshold: .5 });
+document.querySelectorAll('[data-count]').forEach(el => counterObserver.observe(el));
+
+/* ═══ REVEAL ═══ */
+const revealObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); revealObserver.unobserve(e.target); } });
+}, { threshold: .12 });
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+/* ═══ MARQUEE ═══ */
+const track = $('marqueeTrack');
+if (track) track.innerHTML += track.innerHTML;
+
+/* ═══ STORYTELLER LOGIC (Auto + Manual) ═══ */
+let currentStoryScene = 1;
+let storyPlaying = true;
+let storyInterval = setInterval(nextStorySceneAuto, 8000);
+
+function setStoryScene(n) {
+  currentStoryScene = n;
+  document.querySelectorAll('.scene').forEach(el => el.classList.toggle('active', +el.dataset.scene === n));
+  document.querySelectorAll('.text-scene').forEach(el => el.classList.toggle('active', +el.dataset.scene === n));
+  document.querySelectorAll('.story-dot').forEach((el, i) => {
+    el.classList.toggle('active', i + 1 === n);
+  });
+}
+function stepStory(dir) {
+  let next = currentStoryScene + dir;
+  if (next < 1) next = 5;
+  if (next > 5) next = 1;
+  setStoryScene(next);
+  resetStoryTimer();
+}
+function nextStorySceneAuto() {
+  if (!storyPlaying) return;
+  stepStory(1);
+}
+function toggleStoryPlay() {
+  storyPlaying = !storyPlaying;
+  $('playPauseBtn').textContent = storyPlaying ? '⏸' : '▶';
+  resetStoryTimer();
+}
+function resetStoryTimer() {
+  clearInterval(storyInterval);
+  if (storyPlaying) storyInterval = setInterval(nextStorySceneAuto, 8000);
+}
+setStoryScene(1);
+
+/* ═══ CHARTS ═══ */
+Chart.defaults.color = '#7a7368';
+Chart.defaults.font.family = "'Inter', sans-serif";
+Chart.defaults.font.size = 12;
+
+const liveChart = new Chart($('liveChart'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'Round Robin', data: [], borderColor: '#ff3d81', backgroundColor: 'rgba(255,61,129,.08)', borderWidth: 2, tension: .35, fill: true, pointRadius: 2 },
+    { label: 'Q-Learning', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.10)', borderWidth: 2, tension: .35, fill: true, pointRadius: 2 }
+  ]},
+  options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
+    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+    scales: { x: { grid: { color: '#dcecff' }, ticks: { maxTicksLimit: 8 } },
+              y: { grid: { color: '#dcecff' }, beginAtZero: true, title: { display: true, text: 'Latency (ms)' } } } }
+});
+
+new Chart($('benchChart'), {
+  type: 'bar',
+  data: {
+    labels: ['ML-KEM-512', 'ML-KEM-768', 'ML-DSA-44', 'ML-DSA-65'],
+    datasets: [{ label: 'Mean latency (µs)', data: [68.34, 100.05, 207.9, 343.93],
+      backgroundColor: ['#ff3d81', '#0891b2', '#ffd23f', '#7c3aed'], borderRadius: 8, borderSkipped: false }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, grid: { color: '#dcecff' } }, x: { grid: { display: false } } } }
+});
+
+new Chart($('expChart'), {
+  type: 'bar',
+  data: {
+    labels: ['ML-KEM-512', 'ML-KEM-768', 'ML-DSA-44', 'ML-DSA-65'],
+    datasets: [
+      { label: 'Round Robin', data: [102.91, 102.32, 102.53, 102.73], backgroundColor: '#ff3d81', borderRadius: 6 },
+      { label: 'Q-Learning', data: [102.91 - 80.89, 102.32 - 78.91, 102.53 - 75.95, 102.73 - 76.51], backgroundColor: '#10b981', borderRadius: 6 }
+    ]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } },
+    scales: { y: { beginAtZero: true, grid: { color: '#dcecff' } }, x: { grid: { display: false } } } }
+});
+
+/* ═══ SPARKLINES ═══ */
+function drawSpark(canvasId, data, color) {
+  const c = $(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0, 0, w, h);
+  if (data.length < 2) return;
+  const max = Math.max(...data), min = Math.min(...data);
+  const range = max - min || 1;
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+/* ═══ DASHBOARD ═══ */
+let running = false, runs = [], rrLatencies = [], aiLatencies = [], rrHits = [0,0,0], aiHits = [0,0,0];
+
+async function doReset() {
+  try { await fetch(API + '/reset', { method: 'POST' }); } catch(e) {}
+  runs = []; rrLatencies = []; aiLatencies = []; rrHits = [0,0,0]; aiHits = [0,0,0];
+  liveChart.data.labels = []; liveChart.data.datasets[0].data = []; liveChart.data.datasets[1].data = []; liveChart.update();
+  setText('rrAvg','—'); setText('aiAvg','—'); setText('rrReq','—');
+  setText('aiState','—'); setText('aiReason','—'); setText('aiUpd','Q ← Q + 0.5 × (r − Q)');
+  $('aiMode').textContent = '—'; $('aiMode').className = 'mode-badge exploit';
+  for (let i = 1; i <= 3; i++) {
+    $('rrNodes').children[i-1].classList.remove('active');
+    $('aiNodes').children[i-1].classList.remove('active');
+    $('rrNodes').children[i-1].querySelector('.lat').textContent = '—';
+    $('aiNodes').children[i-1].querySelector('.lat').textContent = '—';
+    $('q'+i).style.width = '0%'; $('q'+i).className = 'q-fill'; setText('q'+i+'v', '—');
+  }
+  $('rrHeatmap').children[0].style.background = 'var(--line)';
+  $('rrHeatmap').children[1].style.background = 'var(--line)';
+  $('rrHeatmap').children[2].style.background = 'var(--line)';
+  $('aiHeatmap').children[0].style.background = 'var(--line)';
+  $('aiHeatmap').children[1].style.background = 'var(--line)';
+  $('aiHeatmap').children[2].style.background = 'var(--line)';
+  drawSpark('rrSpark', [], '#ff3d81');
+  drawSpark('aiSpark', [], '#10b981');
+  $('logBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">Ready to run</td></tr>';
+  $('statusBadge').className = 'status-pill'; $('statusBadge').textContent = 'Idle';
+}
+
+function updateHeatmap(el, hits) {
+  const total = hits.reduce((a,b) => a+b, 0) || 1;
+  el.children[0].style.background = `rgba(255,61,129,${.15 + (hits[0]/total)*.85})`;
+  el.children[1].style.background = `rgba(255,194,51,${.15 + (hits[1]/total)*.85})`;
+  el.children[2].style.background = `rgba(109,40,217,${.15 + (hits[2]/total)*.85})`;
+  el.children[0].style.color = hits[0]/total > .3 ? '#fff' : '#0a0a0a';
+  el.children[1].style.color = hits[1]/total > .3 ? '#0a0a0a' : '#0a0a0a';
+  el.children[2].style.color = hits[2]/total > .3 ? '#fff' : '#0a0a0a';
+}
+
+async function doRun() {
+  if (running || !serverOnline) return;
+  running = true; $('runBtn').disabled = true; $('runBtn').textContent = 'Running…';
+  await doReset();
+  $('statusBadge').className = 'status-pill running'; $('statusBadge').textContent = 'Running';
+  toast('Simulation started', 'info');
+  const algo = $('algorithm').value, n = parseInt($('numReq').value, 10);
+  let hadError = false;
+
+  for (let i = 0; i < n; i++) {
+    /* Round Robin */
+    try {
+      const r = await fetch(API + '/route', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ algorithm: algo, mode: 'baseline_rr' }) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      const nodeId = d.routed_to.split('//').pop().split(':')[0];
+      const idx = parseInt(nodeId.replace('node',''), 10);
+      setText('rrReq', '#' + (i+1));
+      const el = $('rrNodes').children[idx-1]; el.classList.add('active');
+      el.querySelector('.lat').textContent = d.latency_ms.toFixed(1) + ' ms';
+      rrHits[idx-1]++;
+      runs.push({ i: i+1, mode:'RR', node: nodeId, latency: d.latency_ms, crypto: d.crypto_ms });
+      rrLatencies.push(d.latency_ms);
+      setText('rrAvg', (rrLatencies.reduce((a,b)=>a+b,0)/rrLatencies.length).toFixed(1) + ' ms');
+      liveChart.data.labels.push('#' + (i+1)); liveChart.data.datasets[0].data.push(d.latency_ms); liveChart.update();
+      updateHeatmap($('rrHeatmap'), rrHits);
+      drawSpark('rrSpark', rrLatencies, '#ff3d81');
+      await sleep(40); el.classList.remove('active');
+    } catch(e) { hadError = true; console.error('RR', e); }
+
+    /* Q-Learning */
+    try {
+      const r = await fetch(API + '/route', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ algorithm: algo, mode: 'rl' }) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      const nodeId = d.routed_to.split('//').pop().split(':')[0];
+      const idx = parseInt(nodeId.replace('node',''), 10);
+      const el = $('aiNodes').children[idx-1]; el.classList.add('active');
+      el.querySelector('.lat').textContent = d.latency_ms.toFixed(1) + ' ms';
+      aiHits[idx-1]++;
+      const dec = d.decision;
+      if (dec) {
+        setText('aiState', `(${dec.state[0]}, ${dec.state[1]})`);
+        $('aiMode').textContent = dec.mode; $('aiMode').className = 'mode-badge ' + dec.mode;
+        setText('aiReason', dec.reason);
+        if (d.update) setText('aiUpd', `Q ← ${d.update.old_q} + 0.5 × (${d.update.reward} − ${d.update.old_q}) = ${d.update.new_q}`);
+        const q = dec.q_values, maxQ = Math.max(q.node1, q.node2, q.node3, 1);
+        const winner = ['node1','node2','node3'].find(x => q[x] === Math.max(q.node1, q.node2, q.node3));
+        [1,2,3].forEach(j => {
+          const name = 'node' + j, pct = (q[name] / maxQ) * 100;
+          $('q'+j).style.width = pct + '%'; $('q'+j).className = 'q-fill ' + (name === winner ? 'winner' : '');
+          setText('q'+j+'v', q[name].toFixed(0));
+        });
+      }
+      runs.push({ i: i+1, mode:'AI', node: nodeId, latency: d.latency_ms, crypto: d.crypto_ms, decision: dec, update: d.update });
+      aiLatencies.push(d.latency_ms);
+      setText('aiAvg', (aiLatencies.reduce((a,b)=>a+b,0)/aiLatencies.length).toFixed(1) + ' ms');
+      liveChart.data.datasets[1].data.push(d.latency_ms); liveChart.update();
+      updateHeatmap($('aiHeatmap'), aiHits);
+      drawSpark('aiSpark', aiLatencies, '#10b981');
+      await sleep(40); el.classList.remove('active');
+    } catch(e) { hadError = true; console.error('AI', e); setText('aiAvg','Error'); }
+    renderLog();
+  }
+
+  if (hadError) {
+    $('statusBadge').className = 'status-pill error'; $('statusBadge').textContent = 'Error';
+    toast('Simulation finished with errors — check console', 'error');
+  } else if (rrLatencies.length && aiLatencies.length) {
+    const avgRR = rrLatencies.reduce((a,b)=>a+b,0)/rrLatencies.length;
+    const avgAI = aiLatencies.reduce((a,b)=>a+b,0)/aiLatencies.length;
+    const delta = ((avgRR - avgAI) / avgRR) * 100;
+    $('statusBadge').className = 'status-pill done';
+    $('statusBadge').textContent = `Done — AI is ${delta.toFixed(1)}% faster`;
+    toast(`Done. AI is ${delta.toFixed(1)}% faster than Round Robin.`, 'success');
+  }
+  running = false; $('runBtn').disabled = false; $('runBtn').textContent = '▶ Run simulation';
+}
+
+function renderLog() {
+  $('logBody').innerHTML = runs.slice().reverse().map(r => {
+    const q = r.update ? `${r.update.old_q} → ${r.update.new_q}` : '—';
+    const reward = r.update ? r.update.reward.toFixed(2) : '—';
+    const mode = r.decision ? r.decision.mode : '—';
+    const modeClass = mode === 'explore' ? 'tag explore' : (mode === 'exploit' ? 'tag exploit' : '');
+    return `<tr>
+      <td>${String(r.i).padStart(3,'0')}</td>
+      <td><span class="tag ${r.mode==='AI'?'ai':'rr'}">${r.mode==='AI'?'Q-Learning':'Round Robin'}</span></td>
+      <td>${r.node}</td>
+      <td>${r.latency.toFixed(2)} ms</td>
+      <td>${r.crypto.toFixed(3)} ms</td>
+      <td>${mode !== '—' ? `<span class="${modeClass}">${mode}</span>` : '—'}</td>
+      <td>${reward}</td>
+      <td>${q}</td>
+    </tr>`;
+  }).join('');
+}
+
+$('numReq').addEventListener('input', e => setText('reqLabel', e.target.value));
+$('runBtn').addEventListener('click', doRun);
+$('resetBtn').addEventListener('click', () => { doReset(); toast('Reset', 'info'); });
+$('downloadBtn').addEventListener('click', () => {
+  if (!runs.length) { toast('Run the simulation first', 'error'); return; }
+  let csv = 'req,strategy,node,latency_ms,crypto_ms,mode,reward,q_update\n';
+  runs.forEach(r => {
+    const mode = r.decision ? r.decision.mode : '—';
+    const reward = r.update ? r.update.reward.toFixed(2) : '';
+    const qu = r.update ? `${r.update.old_q}->${r.update.new_q}` : '';
+    csv += `${r.i},${r.mode},${r.node},${r.latency_ms},${r.crypto_ms},${mode},${reward},${qu}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'pqc_results.csv'; a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV exported', 'success');
+});
+
+/* ═══ GAME LOGIC (1v1 Match) ═══ */
+const canvas = $('gameCanvas');
+const ctx = canvas.getContext('2d');
+let gNodes = [
+  { x: 150, y: 120, name:'Node 1', lat: 0,   color:'#10b981', q: 500 },
+  { x: 150, y: 250, name:'Node 2', lat: 100, color:'#ffd23f', q: 500 },
+  { x: 150, y: 380, name:'Node 3', lat: 200, color:'#ff3d81', q: 500 }
+];
+const balancer = { x: 600, y: 250 };
+
+let matchTotalRounds = 5;
+let matchCurrentRound = 0;
+let matchUserScore = 0;
+let matchAIScore = 0;
+let matchRunning = false;
+let gameBusy = false;
+
+let packetUser = null;
+let packetAI = null;
+let userTargetNode = null;
+
+function toggleGame(open) {
+  $('gameModal').classList.toggle('open', open);
+  if (open) { resizeCanvas(); drawGame(); }
+}
+
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = 500 * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function drawGame() {
+  const w = canvas.width / (window.devicePixelRatio || 1);
+  const h = 500;
+  ctx.clearRect(0, 0, w, h);
+
+  gNodes.forEach(n => {
+    ctx.beginPath(); ctx.moveTo(balancer.x, balancer.y); ctx.lineTo(n.x, n.y);
+    ctx.strokeStyle = '#cfe2f7'; ctx.lineWidth = 3; ctx.setLineDash([6,6]); ctx.stroke(); ctx.setLineDash([]);
+  });
+
+  ctx.beginPath(); ctx.arc(balancer.x, balancer.y, 50, 0, Math.PI*2);
+  ctx.fillStyle = '#0a0a0a'; ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 14px "Space Grotesk", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('ROUTER', balancer.x, balancer.y);
+
+  gNodes.forEach(n => {
+    ctx.beginPath(); ctx.arc(n.x, n.y, 45, 0, Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.lineWidth = 5; ctx.strokeStyle = n.color; ctx.stroke();
+    ctx.fillStyle = '#0a0a0a'; ctx.font = 'bold 14px "Space Grotesk", sans-serif';
+    ctx.fillText(n.name, n.x, n.y - 8);
+    ctx.fillStyle = '#7a7368'; ctx.font = '12px "JetBrains Mono", monospace';
+    ctx.fillText(n.lat + ' ms', n.x, n.y + 12);
+  });
+
+  const chartX = w - 200, chartY = 20, chartW = 180, chartH = 110;
+  ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(chartX, chartY, chartW, chartH);
+  ctx.strokeStyle = '#cfe2f7'; ctx.lineWidth = 2; ctx.strokeRect(chartX, chartY, chartW, chartH);
+  ctx.fillStyle = '#7a7368'; ctx.font = 'bold 10px "Inter", sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('Q-VALUES', chartX + 10, chartY + 16);
+  const maxQ = Math.max(...gNodes.map(n => n.q), 1);
+  gNodes.forEach((n, i) => {
+    const bh = (n.q / maxQ) * (chartH - 40);
+    ctx.fillStyle = n.color;
+    ctx.fillRect(chartX + 18 + i*55, chartY + chartH - 12 - bh, 35, bh);
+    ctx.fillStyle = '#0a0a0a'; ctx.font = 'bold 11px "JetBrains Mono", monospace'; ctx.textAlign = 'center';
+    ctx.fillText(n.q.toFixed(0), chartX + 35 + i*55, chartY + chartH - 16 - bh);
+  });
+
+  if (packetUser) {
+    ctx.beginPath(); ctx.arc(packetUser.x, packetUser.y, 12, 0, Math.PI*2);
+    ctx.fillStyle = '#ff3d81'; ctx.shadowColor = '#ff3d81'; ctx.shadowBlur = 20; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Inter'; ctx.fillText('YOU', packetUser.x, packetUser.y + 4);
+  }
+  if (packetAI) {
+    ctx.beginPath(); ctx.arc(packetAI.x, packetAI.y, 12, 0, Math.PI*2);
+    ctx.fillStyle = '#10b981'; ctx.shadowColor = '#10b981'; ctx.shadowBlur = 20; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Inter'; ctx.fillText('AI', packetAI.x, packetAI.y + 4);
+  }
+}
+
+function startMatch() {
+  if (gameBusy) return;
+  matchTotalRounds = parseInt($('roundCount').value, 10);
+  matchCurrentRound = 0;
+  matchUserScore = 0;
+  matchAIScore = 0;
+  matchRunning = true;
+  $('scoreYou').textContent = '0';
+  $('scoreAI').textContent = '0';
+  $('gameLog').innerHTML = `<strong>Match Started!</strong> Best of ${matchTotalRounds}. Choose a node to route your packet.`;
+  $('btnStartMatch').disabled = true;
+  $('roundCount').disabled = true;
+  enableUserButtons(true);
+}
+
+function enableUserButtons(enable) {
+  [1,2,3].forEach(i => $(`btnPick${i}`).disabled = !enable);
+}
+
+function userPickNode(idx) {
+  if (!matchRunning || gameBusy) return;
+  gameBusy = true;
+  enableUserButtons(false);
+
+  userTargetNode = gNodes[idx];
+  
+  const maxQ = Math.max(...gNodes.map(n => n.q));
+  const candidates = gNodes.map((n,i)=>({n,i})).filter(x => x.n.q === maxQ);
+  const aiPick = candidates[Math.floor(Math.random() * candidates.length)];
+  const aiTargetNode = aiPick.n;
+
+  $('gameLog').innerHTML = `<strong>Round ${matchCurrentRound + 1}</strong><br>You picked: ${userTargetNode.name}<br>AI picked: ${aiTargetNode.name}`;
+
+  packetUser = { x: balancer.x, y: balancer.y, target: userTargetNode, start: performance.now() };
+  packetAI = { x: balancer.x, y: balancer.y, target: aiTargetNode, start: performance.now() };
+
+  function animate(t) {
+    const speed = 800; 
+    const p = Math.min((t - packetUser.start) / speed, 1);
+
+    packetUser.x = balancer.x + (userTargetNode.x - balancer.x) * p;
+    packetUser.y = balancer.y + (userTargetNode.y - balancer.y) * p;
+
+    packetAI.x = balancer.x + (aiTargetNode.x - balancer.x) * p;
+    packetAI.y = balancer.y + (aiTargetNode.y - balancer.y) * p;
+
+    drawGame();
+
+    if (p < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      const userLat = userTargetNode.lat + Math.random() * 4;
+      const aiLat = aiTargetNode.lat + Math.random() * 4;
+
+      const reward = 1000 / (aiLat + 1);
+      const oldQ = aiTargetNode.q;
+      aiTargetNode.q = oldQ + 0.5 * (reward - oldQ);
+      
+      $('gq1').textContent = gNodes[0].q.toFixed(1);
+      $('gq2').textContent = gNodes[1].q.toFixed(1);
+      $('gq3').textContent = gNodes[2].q.toFixed(1);
+
+      let roundMsg = '';
+      if (userLat < aiLat) {
+        matchUserScore++;
+        roundMsg = `<strong style="color:var(--coral)">You win this round!</strong> (${userLat.toFixed(1)}ms vs ${aiLat.toFixed(1)}ms)`;
+      } else if (aiLat < userLat) {
+        matchAIScore++;
+        roundMsg = `<strong style="color:var(--mint)">AI wins this round!</strong> (${userLat.toFixed(1)}ms vs ${aiLat.toFixed(1)}ms)`;
+      } else {
+        roundMsg = `Tie! (${userLat.toFixed(1)}ms vs ${aiLat.toFixed(1)}ms)`;
+      }
+
+      $('scoreYou').textContent = matchUserScore;
+      $('scoreAI').textContent = matchAIScore;
+      $('gameLog').innerHTML = `<strong>Round ${matchCurrentRound + 1} Complete</strong><br>You: ${userTargetNode.name} (${userLat.toFixed(1)}ms)<br>AI: ${aiTargetNode.name} (${aiLat.toFixed(1)}ms)<br><br>${roundMsg}`;
+
+      packetUser = null;
+      packetAI = null;
+      drawGame();
+
+      matchCurrentRound++;
+
+      if (matchCurrentRound >= matchTotalRounds) {
+        matchRunning = false;
+        let finalMsg = '';
+        if (matchUserScore > matchAIScore) finalMsg = `<h2 style="color:var(--coral); margin-top:10px;">🏆 YOU WIN!</h2>`;
+        else if (matchAIScore > matchUserScore) finalMsg = `<h2 style="color:var(--mint); margin-top:10px;">🤖 AI WINS!</h2>`;
+        else finalMsg = `<h2 style="color:var(--ink); margin-top:10px;">🤝 IT'S A TIE!</h2>`;
+
+        $('gameLog').innerHTML = `<strong>Match Over</strong><br>Final Score: You ${matchUserScore} - ${matchAIScore} AI<br>${finalMsg}`;
+        $('btnStartMatch').disabled = false;
+        $('roundCount').disabled = false;
+      } else {
+        $('gameLog').innerHTML += '<br><em>Get ready for the next round...</em>';
+        setTimeout(() => {
+          if (matchRunning) enableUserButtons(true);
+        }, 1000);
+      }
+      gameBusy = false;
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+function resetGame() {
+  gNodes.forEach(n => n.q = 500);
+  matchUserScore = 0;
+  matchAIScore = 0;
+  matchRunning = false;
+  $('scoreYou').textContent = '0';
+  $('scoreAI').textContent = '0';
+  $('gq1').textContent = '500.0';
+  $('gq2').textContent = '500.0';
+  $('gq3').textContent = '500.0';
+  $('gameLog').textContent = 'AI Memory Reset. Ready to start a new match.';
+  $('btnStartMatch').disabled = false;
+  $('roundCount').disabled = false;
+  enableUserButtons(false);
+  packetUser = null; packetAI = null;
+  drawGame();
+}
+
+window.addEventListener('resize', () => { if ($('gameModal').classList.contains('open')) { resizeCanvas(); drawGame(); } });
+
+/* ═══ 4D MOTION: story + architecture ═══ */
+(function(){
+  const sec=document.getElementById('story'),box=document.querySelector('.story-container');
+  if(sec&&box){
+    sec.addEventListener('pointermove',e=>{const r=box.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;
+      box.style.setProperty('--ry',(x*10)+'deg');box.style.setProperty('--rx',(-y*8)+'deg');
+      box.style.setProperty('--px',x*2);box.style.setProperty('--py',y*2)});
+    sec.addEventListener('pointerleave',()=>{['--rx','--ry','--px','--py'].forEach(k=>box.style.setProperty(k,0))});
+    addEventListener('scroll',()=>{const r=box.getBoundingClientRect(),p=(r.top+r.height/2)/innerHeight-.5;box.style.setProperty('--sx',(p*14)+'deg')},{passive:true});
+    const sc=document.querySelector('.story-controls');
+    if(sc){sc.insertAdjacentHTML('afterend','<div class="story-prog"><i></i></div>');}
+    const prev=setStoryScene;
+    setStoryScene=function(n){prev(n);const b=document.querySelector('.story-prog i');if(b){b.style.animation='none';b.offsetWidth;b.style.animation=''}};
+  }
+  const st=document.getElementById('archStage'),sc2=document.getElementById('archScene');
+  if(st){
+    let view='orbit',mx=0,my=0,vis=false,t0=performance.now();
+    const targets={iso:[55,-28,.8],flat:[0,0,1]};
+    new IntersectionObserver(e=>{vis=e[0].isIntersecting}).observe(st);
+    sc2.addEventListener('pointermove',e=>{const r=sc2.getBoundingClientRect();mx=(e.clientX-r.left)/r.width-.5;my=(e.clientY-r.top)/r.height-.5});
+    sc2.addEventListener('pointerleave',()=>{mx=0;my=0});
+    document.querySelectorAll('[data-av]').forEach(b=>b.onclick=()=>{view=b.dataset.av;document.querySelectorAll('[data-av]').forEach(x=>x.classList.toggle('on',x===b))});
+    let ax=50,az=-20,sc=.82;
+    (function loop(now){requestAnimationFrame(loop);if(!vis)return;const t=(now-t0)/1000;let tx,tz,ts;
+      if(view==='orbit'){tx=48+Math.cos(t*.6)*7-my*14;tz=-20+Math.sin(t*.5)*18+mx*30;ts=.82}
+      else{[tx,tz,ts]=targets[view];tx-=my*10*(view==='iso');tz+=mx*20*(view==='iso')}
+      ax+=(tx-ax)*.07;az+=(tz-az)*.07;sc+=(ts-sc)*.07;
+      st.style.setProperty('--ax',ax+'deg');st.style.setProperty('--az',az+'deg');st.style.setProperty('--sc',sc)})(performance.now());
+  }
+})();
+
+(function(){
+  document.querySelectorAll('.algo-card,.step,.hero-stat,.dashboard-shell,.faq-item').forEach(el=>{el.classList.add('tilt');
+    el.addEventListener('pointermove',e=>{const r=el.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5,k=el.matches('.dashboard-shell')?2:9;el.style.transform=`perspective(800px) rotateY(${x*k}deg) rotateX(${-y*k}deg) translateZ(${k>2?14:0}px)`});
+    el.addEventListener('pointerleave',()=>{el.style.transform=''})});
+  const st=document.querySelector('.story-text');if(st){st.dataset.n='01';const p=setStoryScene;setStoryScene=function(n){p(n);st.dataset.n='0'+n}}
+})();
+</script>
+</body>
+</html>
